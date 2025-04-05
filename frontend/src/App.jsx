@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
+import ProtectedRoute from './routes/ProtectedRoute'
 import LandingPage from './pages/landing/LandingPage'
 import About from './pages/landing/About'
 import Login from './pages/auth/Login'
@@ -29,6 +30,31 @@ const App = () => {
       </Routes>
     </div>
   )
+}
+
+function AppRouter() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        
+        {/* Admin Routes */}
+        <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route path="/admin/*" element={<AdminDashboard />} />
+        </Route>
+        
+        {/* Teacher Routes */}
+        <Route element={<ProtectedRoute allowedRoles={['teacher']} />}>
+          <Route path="/teacher/*" element={<TeacherDashboard />} />
+        </Route>
+        
+        {/* Student Routes */}
+        <Route element={<ProtectedRoute allowedRoles={['student']} />}>
+          <Route path="/student/*" element={<StudentDashboard />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
 export default App
