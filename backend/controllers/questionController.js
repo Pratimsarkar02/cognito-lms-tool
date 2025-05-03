@@ -1,6 +1,6 @@
 import Question from '../models/questionModel.js';
 import Exam from '../models/examModel.js';
-
+import ExamAttempt from '../models/examAttemptModel.js';
 
 
 export const addQuestion = async (req, res) => {
@@ -95,7 +95,7 @@ export const updateQuestion = async (req, res) => {
     });
   }
 };
-// Add the deleteFunction
+
 export const deleteQuestion = async (req, res) => {
   try {
     const { questionId } = req.params;
@@ -128,9 +128,22 @@ export const deleteQuestion = async (req, res) => {
 
 export const getExamQuestions = async (req, res) => {
   try {
+    const attempt = await ExamAttempt.findOne({
+      examId: req.params.examId,
+      studentId: req.user.id,
+      isActive: true
+    });
+/*  //shifting to exam attempt middleware
+
+    if(!attempt){
+      return res.status(403).json({
+        success: false,
+        message: "Start your exam attempt first"
+      })
+    } */
     const questions = await Question.find({ examId: req.params.examId })
-      .select('-correctOptions -__v')
-      .lean();
+    .select('-options.isCorrect -__v')
+    .lean();
 
     if (!questions.length) {
       return res.status(404).json({ 
@@ -139,13 +152,15 @@ export const getExamQuestions = async (req, res) => {
       });
     }
 
-    // Shuffle questions and options
-    const shuffledQuestions = questions
-      .sort(() => Math.random() - 0.5)
-      .map(q => ({
-        ...q,
-        options: q.options.sort(() => Math.random() - 0.5)
-      }));
+    // Apply shuffling based on attempt records
+  const orderedQuestions = attempt.questionOrder
+  .map(id => questions.find(q => q._id.equals(id)));
+
+const shuffledQuestions = orderedQuestions.map(q => ({
+  ...q,
+  options: attempt.optionOrder.get(q._id.toString())
+    .map(origIdx => q.options[origIdx])
+}));
       
       res.status(200).json({ 
         success: true, 
@@ -159,7 +174,7 @@ export const getExamQuestions = async (req, res) => {
       });
     }
   };
-  // Add this function
+
 const updateExamTotalMarks = async (examId) => {
     try {
       const questions = await Question.find({ examId });

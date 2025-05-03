@@ -8,7 +8,7 @@ import Analytics from '../models/analyticsModel.js';
 
 export const createExam = async (req, res) => {
   try {
-    const { title, description, startTime, endTime, duration, instructions } = req.body;
+    const { title, description, startTime, endTime, duration, maxAttempts, isShuffleQuestions, isNegativeMarking, negativeMarkingPercentage, instructions } = req.body;
 
     if (!title || !startTime || !endTime || !duration) {
       return res.status(400).json({ 
@@ -38,6 +38,10 @@ export const createExam = async (req, res) => {
       startTime: new Date(startTime),
       endTime: new Date(endTime),
       duration,
+      maxAttempts,
+      isShuffleQuestions, 
+      isNegativeMarking, 
+      negativeMarkingPercentage,
       instructions,      
       createdBy: req.user.id
     });
@@ -239,43 +243,53 @@ const shuffleArray = (array) => {
 
 export const startExamAttempt = async (req, res) => {
   try {
-    //Check if exam exists
-    const exam = await Exam.findById(req.params.examId);
-        if (!exam){
-           return res.status(404).json({ 
-            success: false, 
-            message: "Exam not found" 
-          });
-        }
-    // Check for existing incomplete attempt
-    const existingAttempt = await ExamAttempt.findOne({
-      examId: req.params.examId,
-      studentId: req.user.id,
-      isActive: true,
-      isCompleted: false
-    });
+    const { examId } = req.params;
+    const studentId = req.user.id;
 
-    if (existingAttempt) {
-      return res.status(400).json({
+    // Get exam and questions
+    const [exam, questions] = await Promise.all([
+      Exam.findById(examId),
+      Question.find({ examId }).select('_id options').lean()
+    ]);
+
+    if (!exam || !questions.length) {
+      return res.status(404).json({
         success: false,
-        message: "You have an existing attempt in progress"
+        message: "Exam or questions not found"
       });
     }
 
-    // Create new incomplete attempt with session data
+    // Generate shuffle mappings
+    const questionOrder = exam.isShuffleQuestions 
+      ? shuffleArray(questions.map(q => q._id))
+      : questions.map(q => q._id);
+
+      const optionOrder = questions.reduce((acc, question) => {
+        const qId = question._id.toString();
+        acc[qId] = exam.isShuffleQuestions 
+          ? shuffleArray([...Array(question.options.length).keys()])
+          : [...Array(question.options.length).keys()];
+        return acc;
+      }, {});
+      console.log('[DEBUG] Generated Option Order:', JSON.stringify(optionOrder, null, 2));
+    // Create new attempt
     const attempt = new ExamAttempt({
-      examId: req.params.examId,
-      studentId: req.user.id,
-      duration: exam.duration,
-      isActive: true,
-      isCompleted: false
+      examId,
+      studentId,
+      questionOrder,
+      optionOrder: new Map(  // Convert to proper Map
+        Object.entries(optionOrder).map(([k,v]) => [k.toString(), v])
+      ),
+      startTime: new Date(),
+      duration: exam.duration * 60
     });
+    console.log('[DEBUG] ExamAttempt Document:', JSON.stringify(attempt, null, 2));
 
     await attempt.save();
-    
-    // Create exam log entry AFTER attempt creation
-    await ExamLog.create({
-      examId: req.params.examId,
+
+    // Create exam log with start event
+    const examLog = new ExamLog({
+      examId,
       studentId: req.user.id,
       attemptId: attempt._id,
       events: [{
@@ -283,17 +297,18 @@ export const startExamAttempt = async (req, res) => {
         timestamp: new Date()
       }]
     });
+    await examLog.save();
 
     res.status(201).json({
       success: true,
       message: "Exam attempt started",
-      attempt
+      attemptId: attempt._id
     });
-    
+
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      message: error.message 
+    res.status(500).json({
+      success: false,
+      message: error.message
     });
   }
 };

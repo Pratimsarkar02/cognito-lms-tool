@@ -68,20 +68,30 @@ export const checkAttemptLimit = async (req, res, next) => {
   try {
     const exam = await Exam.findById(req.params.examId);
     
+    // Unlimited attempts allowed
     if (exam.maxAttempts === 0) return next();
 
-    // Count only COMPLETED attempts
+    // Count only completed attempts
     const completedAttempts = await ExamAttempt.countDocuments({
       examId: req.params.examId,
       studentId: req.user.id,
       isCompleted: true
     });
 
+    // Allow new attempt if under limit OR has active attempt
     if (completedAttempts >= exam.maxAttempts) {
-      return res.status(403).json({
-        success: false,
-        message: "Maximum attempt limit reached"
+      const activeAttempt = await ExamAttempt.findOne({
+        examId: req.params.examId,
+        studentId: req.user.id,
+        isActive: true
       });
+
+      if (!activeAttempt) {
+        return res.status(403).json({
+          success: false,
+          message: "Maximum attempt limit reached"
+        });
+      }
     }
 
     next();
@@ -117,3 +127,48 @@ export const isQuestionOwner = async (req, res, next) => {
     });
   }
 };
+
+export const validateExamTiming = async (req, res, next) => {
+  try {
+    const { examId } = req.params;
+    const studentId = req.user.id;
+
+    // Get active attempt
+    const attempt = await ExamAttempt.findOne({
+      examId,
+      studentId,
+      isActive: true
+    });
+
+    if (!attempt) {
+      return res.status(403).json({
+        success: false,
+        message: "No active exam session"
+      });
+    }
+
+    // Get exam duration
+    const exam = await Exam.findById(examId);
+    const elapsedSeconds = (Date.now() - attempt.startTime) / 1000;
+
+    if (elapsedSeconds > exam.duration * 60) {
+      await ExamAttempt.findByIdAndUpdate(attempt._id, {
+        isActive: false,
+        isCompleted: true
+      });
+      
+      return res.status(403).json({
+        success: false,
+        message: "Exam time expired"
+      });
+    }
+
+    next();
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+

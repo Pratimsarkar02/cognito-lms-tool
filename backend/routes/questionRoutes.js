@@ -5,6 +5,7 @@ import {
   getExamQuestions,
   deleteQuestion
 } from '../controllers/questionController.js';
+import { checkAttemptExists } from '../middleware/checkAttemptExists.js';
 import {
   isFacultyOrAdmin
 } from '../middleware/roleMiddleware.js';
@@ -42,6 +43,7 @@ router.get(
   '/:examId/questions',
   userAuth,
   isExamActive,
+  checkAttemptExists,
   getExamQuestions
 );
 //Delete Question (Exam Creator only)

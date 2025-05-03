@@ -53,19 +53,26 @@ router.get('/active',
 // Start Exam Attempt (Students)
 router.post('/:examId/attempt', 
   userAuth, 
-  isStudent,
+  //isStudent,
   isExamActive, // Check exam is published and in time window
   checkAttemptLimit, // Check attempt count
   startExamAttempt
 );
-// Complete Exam Attempt (Students)
+/* // Complete Exam Attempt (Students)
 router.post('/:examId/complete', 
   userAuth, 
   isStudent,
   isExamActive,
   checkExamTimeout,
   completeExamAttempt
-);
+); */
+// Deprecated notice for old complete route
+router.post('/:examId/complete', (req, res) => {
+  res.status(410).json({
+    success: false,
+    message: "This endpoint is deprecated. Please use the new endpoint."
+  });
+});
 // Delete Exam (Exam Creator)
 router.delete('/:examId', 
   userAuth, 

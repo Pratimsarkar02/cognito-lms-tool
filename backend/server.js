@@ -46,13 +46,12 @@ app.use('/api/results', resultRoutes);
 app.use('/api/logs', examLogRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
-cron.schedule('0 * * * *', async() => {
-    console.log('Running cron job to update exam analytics');   
+// Update analytics hourly
+cron.schedule('0 * * * *', async () => {
+    console.log('Updating exam analytics...');
     const exams = await Exam.find();
-    exams.forEach(async exam => {
-        await updateExamAnalytics(exam._id);
-    });
-});
+    await Promise.all(exams.map(exam => updateExamAnalytics(exam._id)));
+  });
 
 app.listen(port, () => {
     console.log(`Server is running on PORT: ${port}`);

@@ -5,77 +5,91 @@ import Result from '../models/resultModel.js';
 import Response from '../models/responseModel.js';
 import ExamAttempt from '../models/examAttemptModel.js';
 import Exam from '../models/examModel.js';
+import Question from '../models/questionModel.js';
+import { populate } from 'dotenv';
 
 // Controller to update exam analytics
 export const updateExamAnalytics = async (examId) => {
   try {
-    const [attempts, responses, logs, totalMarks] = await Promise.all([
-      ExamAttempt.find({ examId }).lean(),
+    // 1. Fetch all required data (ADDED EXAM LOGS)
+    const [results, responses, questions, exam, logs] = await Promise.all([
+      Result.find({ examId }).lean(),
       Response.find({ examId }).lean(),
-      ExamLog.find({ examId }).lean(),
-      Exam.findById(examId).select('totalMarks').lean()
+      Question.find({ examId }).lean(),
+      Exam.findById(examId).lean(),
+      ExamLog.find({ examId }).lean() // ADDED LOGS FETCH
     ]);
-
-    // Unique students calculation with null check
-    const uniqueStudentsResult = await ExamAttempt.aggregate([
-      { $match: { examId: new mongoose.Types.ObjectId(examId) } },
-      { $group: { _id: "$studentId" } },
-      { $count: "uniqueStudents" }
-    ]);
-    const uniqueStudents = uniqueStudentsResult[0]?.uniqueStudents || 0;
-
-    // Question statistics with null checks
-    const questionStats = await Response.aggregate([
-      { $match: { examId: new mongoose.Types.ObjectId(examId) } },
-      { $group: {
-        _id: "$questionId",
-        correct: { $sum: { $cond: ["$isCorrect", 1, 0] } },
-        total: { $sum: 1 },
-        avgTime: { $avg: "$timeSpent" }
-      }},
-      { $lookup: {
-        from: "questions",
-        localField: "_id",
-        foreignField: "_id",
-        as: "question"
-      }}
-    ]);
-
-    // Score calculations with null checks
-    const validScores = responses.filter(r => typeof r.marksObtained === 'number');
-    const scores = validScores.map(r => r.marksObtained);
-    const scoreData = {
-      distribution: calculateScoreDistribution(scores, totalMarks),
-      average: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0,
-      highest: scores.length > 0 ? Math.max(...scores) : 0,
-      lowest: scores.length > 0 ? Math.min(...scores) : 0
-    };
-
-    // Participation data with null checks
+    // 2. Calculate participation metrics (hourly and daily)
     const participation = {
-      hourly: logs?.length ? calculateHourlyParticipation(logs) : [],
-      daily: attempts?.length ? calculateDailyParticipation(attempts) : []
+      hourly: calculateHourlyParticipation(logs),
+      daily: calculateDailyParticipation(logs)
     };
+    // 3. Calculate pass percentage (unique students)
+    const uniqueStudents = [...new Set(results.map(r => r.studentId.toString()))];
+    const passedStudents = results.filter(r => r.isPassed).length;
+    const passPercentage = uniqueStudents.length > 0 
+      ? Number(((passedStudents / uniqueStudents.length) * 100).toFixed(2))
+      : 0;
 
-    await Analytics.findOneAndUpdate(
+    // 4. Score distribution with capped ranges
+    const distribution = results.reduce((acc, result) => {
+      let rangeStart = Math.floor(result.percentage / 25) * 25;
+      rangeStart = Math.min(rangeStart, 75); // Cap at 75-100%
+      const rangeKey = `${rangeStart}-${rangeStart + 25}%`;
+      
+      acc[rangeKey] = (acc[rangeKey] || 0) + 1;
+      return acc;
+    }, {});
+
+    // 5. Question statistics with proper counting
+    const questionStats = questions.map(question => {
+      // Convert to string for reliable comparison
+      const questionIdStr = question._id.toString();
+      
+      const questionResponses = responses.filter(r => 
+        r.questionId?.toString() === questionIdStr // Added null check
+      );
+    
+      // Count only truly correct answers (exclude null/undefined)
+      const correct = questionResponses.filter(r => 
+        r.isCorrect === true
+      ).length;
+    
+      return {
+        questionId: question._id,
+        correctAttempts: correct,
+        totalAttempts: questionResponses.length
+      };
+    });
+
+    // 6. Update analytics document
+    const analytics = await Analytics.findOneAndUpdate(
       { examId },
       {
-        uniqueStudents,
-        totalAttempts: attempts?.length || 0,
-        questionStats: questionStats?.map(stat => ({
-          questionId: stat._id,
-          correctAttempts: stat.correct || 0,
-          totalAttempts: stat.total || 0,
-          averageTime: stat.avgTime || 0,
-          questionText: stat.question[0]?.questionText || 'Deleted Question'
-        })) || [],
-        scores: scoreData,
-        participation
+        totalStudentsAttempted: uniqueStudents.length,
+        passPercentage,
+        scoreDistribution: Object.entries(distribution).map(([range, count]) => ({
+          range,
+          count
+        })),
+        questionStats,
+        participation,
+        lastUpdated: new Date()
       },
-      { upsert: true, new: true }
+      { upsert: true, new: true, runValidators: true }
     );
+
+    // 7. Populate question text for readability
+    await Analytics.populate(analytics, {
+      path: 'questionStats.questionId',
+      select: 'questionText'
+    });
+
+    return analytics;
+
   } catch (error) {
     console.error('Analytics update failed:', error);
+    throw error;
   }
 };
 // Controller to get analytics
@@ -83,10 +97,9 @@ export const getExamAnalytics = async (req, res) => {
   try {
     const { examId } = req.params;
     
-    const analytics = await Analytics.findOne({ examId })
-      .populate('questionStats.questionId', 'questionText')
-      .lean();
-
+    // Force fresh analytics
+    const analytics = await updateExamAnalytics(examId);
+    
     if (!analytics) {
       return res.status(404).json({ 
         success: false, 
@@ -94,17 +107,11 @@ export const getExamAnalytics = async (req, res) => {
       });
     }
 
-    // Add real-time calculated data
-    const [results, logs] = await Promise.all([
-      Result.find({ examId }).lean(),
-      ExamLog.find({ examId }).lean()
-    ]);
-
-    analytics.timeSeriesData = {
-      participationRate: calculateHourlyParticipation(logs),
-      participationRate: calculateDailyParticipation(logs),
-      scoreDistribution: calculateScoreDistribution(results)
-    };
+    // Populate question texts
+    await Analytics.populate(analytics, {
+      path: 'questionStats.questionId',
+      select: 'questionText'
+    });
 
     res.status(200).json({ 
       success: true, 
@@ -118,31 +125,44 @@ export const getExamAnalytics = async (req, res) => {
     });
   }
 };
-
-// Helper: Generate hourly participation data
+// Helper: Hourly Participation
 const calculateHourlyParticipation = (logs) => {
-  return logs.reduce((acc, log) => {
+  const hourlyMap = new Map();
+  
+  logs.forEach(log => {
     log.events.forEach(event => {
-      const hour = new Date(event.timestamp);
-      hour.setMinutes(0, 0, 0);
-      const key = hour.toISOString();
-      
-      acc[key] = acc[key] || { hour, count: 0 };
-      if (event.type === 'start') acc[key].count++;
+      if (event.type === 'start') {
+        const hour = new Date(event.timestamp);
+        hour.setMinutes(0, 0, 0);
+        const key = hour.toISOString();
+        
+        hourlyMap.set(key, (hourlyMap.get(key) || 0) + 1);
+      }
     });
-    return acc;
-  }, {});
+  });
+
+  return Array.from(hourlyMap).map(([hour, count]) => ({
+    hour: new Date(hour),
+    count
+  }));
 };
-// Helper: Generate daily participation data
-const calculateDailyParticipation = (attempts) => {
-  return attempts.reduce((acc, attempt) => {
-    const day = new Date(attempt.createdAt);
+
+// Helper: Daily Participation
+const calculateDailyParticipation = (logs) => {
+  const dailyMap = new Map();
+
+  logs.forEach(log => {
+    const day = new Date(log.createdAt);
     day.setHours(0, 0, 0, 0);
     const key = day.toISOString();
     
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
+    dailyMap.set(key, (dailyMap.get(key) || 0) + 1);
+  });
+
+  return Array.from(dailyMap).map(([date, count]) => ({
+    date: new Date(date),
+    count
+  }));
 };
 // Helper: Generate score distribution
 const calculateScoreDistribution = (scores, totalMarksDoc) => {

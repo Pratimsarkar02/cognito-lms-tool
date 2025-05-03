@@ -1,8 +1,9 @@
 import express from 'express';
 import {
-  generateResult,
   getStudentResult,
-  exportExamResults
+  exportExamResults,
+  getResults,
+  generateResults
 } from '../controllers/resultController.js';
 import {
   isFacultyOrAdmin
@@ -16,14 +17,14 @@ router.post(
   '/:examId/results/generate',
   userAuth,
   isFacultyOrAdmin,
-  generateResult
+  generateResults
 );
 
 // Get Results (Authenticated users)
 router.get(
-  '/:examId/results',
+  '/:examId',
   userAuth,
-  getStudentResult
+  getResults
 );
 
 // Export Results (Faculty/Admin only)
