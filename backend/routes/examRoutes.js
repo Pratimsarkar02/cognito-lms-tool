@@ -6,7 +6,7 @@ import {
   listActiveExams,
   deleteExam,
   startExamAttempt,
-  completeExamAttempt
+  unpublishExam
 } from '../controllers/examController.js';
 import {
   isFacultyOrAdmin,
@@ -16,9 +16,12 @@ import userAuth from '../middleware/userAuth.js';
 import {
   isExamCreator,
   isExamActive,
-  checkAttemptLimit
+  checkAttemptLimit,
+  checkExistingAttempt
 } from '../middleware/examMiddleware.js';
 import { checkExamTimeout } from '../middleware/timeoutMiddleware.js';
+import Exam from '../models/examModel.js';
+import ExamAttempt from '../models/examAttemptModel.js';
 
 const router = express.Router();
 
@@ -42,6 +45,13 @@ router.patch('/:examId/publish',
   isExamCreator, // Checks ownership
   publishExam
 );
+// Unpublish Exam (Exam Creator)
+router.patch('/:examId/unpublish',
+  userAuth,
+  isFacultyOrAdmin,
+  isExamCreator,
+  unpublishExam
+)
 
 // List Active Exams (Students)
 router.get('/active', 
@@ -49,23 +59,52 @@ router.get('/active',
   isStudent, 
   listActiveExams // Controller handles filtering
 );
+// Single Exam Fetch
+router.get('/:examId',
+  userAuth,
+  async (req, res) => {
+    try {
+      const exam = await Exam.findById(req.params.examId)
+        .select('-createdBy -__v')
+        .lean();
+      res.json({ exam });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
 
 // Start Exam Attempt (Students)
 router.post('/:examId/attempt', 
   userAuth, 
-  //isStudent,
+  isStudent,
+  checkExistingAttempt,
   isExamActive, // Check exam is published and in time window
   checkAttemptLimit, // Check attempt count
   startExamAttempt
 );
-/* // Complete Exam Attempt (Students)
-router.post('/:examId/complete', 
-  userAuth, 
+// Check Exam Attempt TImeout (Students)
+router.get('/:examId/attempt',
+  userAuth,
   isStudent,
-  isExamActive,
-  checkExamTimeout,
-  completeExamAttempt
-); */
+  async (req, res) => {
+    try {
+      const attempt = await ExamAttempt.findOne({
+        examId: req.params.examId,
+        studentId: req.user.id,
+        isActive: true
+      })
+      .populate('examId')
+      .lean();
+      
+      if (!attempt) return res.status(404).json({ message: "No active attempt" });
+      
+      res.json({ success: true, attempt });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
 // Deprecated notice for old complete route
 router.post('/:examId/complete', (req, res) => {
   res.status(410).json({
@@ -79,6 +118,33 @@ router.delete('/:examId',
   isFacultyOrAdmin,
   isExamCreator, 
   deleteExam
+);
+
+// Fetch exam details based on creator
+router.get('/my-exams',
+  userAuth,
+  isFacultyOrAdmin,
+  async (req, res) => {
+    try {
+      const exams = await Exam.find({ createdBy: req.user.id });
+      res.json({ exams });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+// Fetch exam details based on admin
+router.get('/all',
+  userAuth,
+  isFacultyOrAdmin,
+  async (req, res) => {
+    try {
+      const exams = await Exam.find().populate('createdBy', 'firstName lastName');
+      res.json({ exams });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
 );
 
 export default router;

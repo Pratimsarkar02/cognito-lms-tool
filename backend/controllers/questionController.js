@@ -128,52 +128,63 @@ export const deleteQuestion = async (req, res) => {
 
 export const getExamQuestions = async (req, res) => {
   try {
+    // 1. Get active attempt with proper population
     const attempt = await ExamAttempt.findOne({
       examId: req.params.examId,
       studentId: req.user.id,
       isActive: true
-    });
-/*  //shifting to exam attempt middleware
+    }).lean();
 
-    if(!attempt){
+    /* Shifted to middleware
+    if (!attempt) {
       return res.status(403).json({
         success: false,
         message: "Start your exam attempt first"
-      })
+      });
     } */
+
+    // 2. Convert optionOrder Map from stored object
+    const optionOrderMap = new Map(
+      Object.entries(attempt.optionOrder).map(([k, v]) => [k.toString(), v])
+    );
+
+    // 3. Get all questions in database order first
     const questions = await Question.find({ examId: req.params.examId })
-    .select('-options.isCorrect -__v')
-    .lean();
-
-    if (!questions.length) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "No questions found for this exam" 
-      });
-    }
-
-    // Apply shuffling based on attempt records
-  const orderedQuestions = attempt.questionOrder
-  .map(id => questions.find(q => q._id.equals(id)));
-
-const shuffledQuestions = orderedQuestions.map(q => ({
-  ...q,
-  options: attempt.optionOrder.get(q._id.toString())
-    .map(origIdx => q.options[origIdx])
-}));
+      .select('-options.isCorrect -__v')
+      .lean();
       
-      res.status(200).json({ 
-        success: true, 
-        questions: shuffledQuestions 
-      });
-      
-    } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        message: error.message 
-      });
-    }
-  };
+      if (!questions.length) {
+        return res.status(404).json({ 
+          success: false, 
+          message: "No questions found for this exam" 
+        });
+      }
+    // 4. Apply question ordering from attempt
+    const orderedQuestions = attempt.questionOrder.map(id => 
+      questions.find(q => q._id.equals(id))
+    ).filter(q => q); // Remove undefined in case of deleted questions
+
+    // 5. Apply option shuffling using converted Map
+    const shuffledQuestions = orderedQuestions.map(q => {
+      const optionIndices = optionOrderMap.get(q._id.toString()) || [];
+      return {
+        ...q,
+        options: optionIndices.map(origIdx => q.options[origIdx])
+      };
+    });
+
+    res.status(200).json({ 
+      success: true, 
+      questions: shuffledQuestions 
+    });
+    
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+};
 
 const updateExamTotalMarks = async (examId) => {
     try {

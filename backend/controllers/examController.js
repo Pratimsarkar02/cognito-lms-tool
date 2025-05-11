@@ -122,6 +122,26 @@ export const publishExam = async (req, res) => {
   }
 };
 
+export const unpublishExam = async (req, res) => {
+  try {
+    const exam = await Exam.findByIdAndUpdate(
+      req.params.examId,
+      { status: 'draft' },
+      { new: true }
+    );
+
+    if (!exam) return res.status(404).json({ message: 'Exam not found' });
+    
+    res.json({ 
+      success: true,
+      message: 'Exam set to draft successfully',
+      exam 
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const listActiveExams = async (req, res) => {
     try {
       // Getting query parameters with defaults
@@ -155,7 +175,7 @@ export const listActiveExams = async (req, res) => {
           .sort(sortBy)
           .skip(skip)
           .limit(limit)
-          .select('-createdBy -__v -instructions')
+          .select('-createdBy -__v')
           .lean(),
   
         // Get total matching exams count
@@ -251,7 +271,20 @@ export const startExamAttempt = async (req, res) => {
       Exam.findById(examId),
       Question.find({ examId }).select('_id options').lean()
     ]);
-
+    // check for active attempt status
+    const existingAttempt = await ExamAttempt.findOne({
+      examId,
+      studentId,
+      isActive: true,
+      isCompleted: false
+    })
+    if (existingAttempt) {
+      return res.status(200).json({
+        success: true,
+        message: "Resuming existing attempt",
+        attempt: existingAttempt
+      });
+    }
     if (!exam || !questions.length) {
       return res.status(404).json({
         success: false,
@@ -306,9 +339,16 @@ export const startExamAttempt = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
+    if(error.code === 11000){
+      const existing = await ExamAttempt.findOne({
+        examId: req.params.examId,
+        studentId: req.user.id
+      }).sort({ createdAt: -1 });
+    }
+    res.status(200).json({
+      success: true,
+      message: "Resuming latest attempt",
+      attempt: existing
     });
   }
 };

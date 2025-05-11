@@ -93,7 +93,7 @@ export const login = async (req, res) => {
     }
     //Checking if the email is valid
     try {
-        const user = await userModel.findOne({email}).select('firstName lastName email role password');
+        const user = await userModel.findOne({email}).select('firstName lastName email role password isAccountVerified');
 
         if (!user) {
             return res.json({success: false, message: "Invalid Email"});
@@ -122,7 +122,8 @@ export const login = async (req, res) => {
                 firstName: user.firstName,
                 lastName: user.lastName,
                 email: user.email,
-                role: user.role
+                role: user.role,
+                isAccountVerified: user.isAccountVerified
             }
         });
 

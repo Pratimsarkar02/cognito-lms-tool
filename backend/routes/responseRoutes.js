@@ -43,7 +43,7 @@ router.put(
 router.post(
   '/:examId/batch',
   userAuth,
-  //isStudent,
+  isStudent,
   isExamActive,
   checkAttemptLimit,
   validateExamTiming,

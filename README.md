@@ -235,3 +235,116 @@ Want to contribute? Feel free to fork the repo, create a feature branch, and sub
 For any queries or suggestions, feel free to reach out!
 - **Email**: help.cognito@gmail.com
 - **GitHub**: [Pratimsarkar02](https://github.com/Pratimsarkar02)
+
+```
+lms-app
+├─ backend
+│  ├─ config
+│  │  ├─ mongodb.js
+│  │  └─ nodemailer.js
+│  ├─ controllers
+│  │  ├─ analyticsController.js
+│  │  ├─ authController.js
+│  │  ├─ examController.js
+│  │  ├─ examLogController.js
+│  │  ├─ exportController.js
+│  │  ├─ questionController.js
+│  │  ├─ responseController.js
+│  │  ├─ resultController.js
+│  │  └─ userController.js
+│  ├─ middleware
+│  │  ├─ checkAttemptExists.js
+│  │  ├─ examMiddleware.js
+│  │  ├─ loggingMiddleware.js
+│  │  ├─ questionValidation.js
+│  │  ├─ roleMiddleware.js
+│  │  ├─ timeoutMiddleware.js
+│  │  └─ userAuth.js
+│  ├─ models
+│  │  ├─ accomodationModel.js
+│  │  ├─ analyticsModel.js
+│  │  ├─ examAttemptModel.js
+│  │  ├─ examLogModel.js
+│  │  ├─ examModel.js
+│  │  ├─ exportProfile.js
+│  │  ├─ notificationModel.js
+│  │  ├─ questionModel.js
+│  │  ├─ responseModel.js
+│  │  ├─ resultModel.js
+│  │  ├─ sectionModel.js
+│  │  └─ userModel.js
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ routes
+│  │  ├─ analyticsRoutes.js
+│  │  ├─ authRoutes.js
+│  │  ├─ examLogRoutes.js
+│  │  ├─ examRoutes.js
+│  │  ├─ questionRoutes.js
+│  │  ├─ responseRoutes.js
+│  │  ├─ resultRoutes.js
+│  │  └─ userRoutes.js
+│  ├─ server.js
+│  └─ utils
+│     └─ cleanup.js
+├─ frontend
+│  ├─ eslint.config.js
+│  ├─ index.html
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ public
+│  │  └─ vite.svg
+│  ├─ src
+│  │  ├─ App.jsx
+│  │  ├─ assets
+│  │  │  ├─ chalkboard-user-solid.svg
+│  │  │  ├─ google.png
+│  │  │  ├─ hero-pg-photo.png
+│  │  │  ├─ logo.svg
+│  │  │  └─ teacher.png
+│  │  ├─ components
+│  │  │  ├─ auth
+│  │  │  │  ├─ ProtectedRoute.jsx
+│  │  │  │  └─ PublicRoute.jsx
+│  │  │  ├─ dashboard
+│  │  │  │  ├─ EmailBanner.jsx
+│  │  │  │  ├─ ExamCard.jsx
+│  │  │  │  ├─ Navbar.jsx
+│  │  │  │  ├─ Sidebar.jsx
+│  │  │  │  └─ Timer.jsx
+│  │  │  ├─ Features.tsx
+│  │  │  ├─ Footer.tsx
+│  │  │  ├─ Hero.tsx
+│  │  │  ├─ icons
+│  │  │  │  └─ GoogleIcon.jsx
+│  │  │  ├─ Navbar.tsx
+│  │  │  ├─ TestimonialCard.tsx
+│  │  │  └─ Testimonials.tsx
+│  │  ├─ contexts
+│  │  │  ├─ AppContext.js
+│  │  │  └─ AppContext.jsx
+│  │  ├─ index.css
+│  │  ├─ lib
+│  │  │  └─ utils.js
+│  │  ├─ main.jsx
+│  │  └─ pages
+│  │     ├─ auth
+│  │     │  ├─ EmailVerify.jsx
+│  │     │  ├─ Login.jsx
+│  │     │  └─ ResetPassword.jsx
+│  │     ├─ dashboard
+│  │     │  ├─ AdminDashboard.jsx
+│  │     │  ├─ components
+│  │     │  │  ├─ DashboardHome.jsx
+│  │     │  │  ├─ ExamInterface.jsx
+│  │     │  │  └─ ExamList.jsx
+│  │     │  ├─ FacultyDashboard.jsx
+│  │     │  └─ StudentDashboard.jsx
+│  │     └─ landing
+│  │        ├─ About.jsx
+│  │        ├─ ContactUs.jsx
+│  │        └─ LandingPage.jsx
+│  └─ vite.config.js
+└─ README.md
+
+```

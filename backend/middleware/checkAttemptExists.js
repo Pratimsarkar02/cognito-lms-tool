@@ -1,7 +1,8 @@
 import ExamAttempt from "../models/examAttemptModel.js";
 
 export const checkAttemptExists = async (req, res, next) => {
-    const attempt = await ExamAttempt.findOne({
+    try {
+      const attempt = await ExamAttempt.findOne({
       examId: req.params.examId,
       studentId: req.user.id,
       isActive: true
@@ -16,4 +17,11 @@ export const checkAttemptExists = async (req, res, next) => {
     
     req.attempt = attempt;
     next();
+  }
+    catch (error){
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
   };

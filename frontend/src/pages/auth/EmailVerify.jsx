@@ -8,8 +8,11 @@ import { toast } from "react-toastify";
 const EmailVerify = () => {
   axios.defaults.withCredentials = true;
 
-  const { backendUrl, isLoggedIn, userData, getUserData } =
-    useContext(AppContent);
+  const { 
+    authState: { isLoggedIn, userData },
+  backendUrl, checkAuthState
+  } = useContext(AppContent);
+  
   const [isLoading, setIsLoading] = useState(false);
   const [otpValues, setOtpValues] = useState(Array(6).fill(""));
 
@@ -19,7 +22,7 @@ const EmailVerify = () => {
   const getDashboardRoute = (userRole) => {
     const roleRoutes = {
       Student: "/student-dashboard",
-      Faculty: "/teacher-dashboard",
+      Faculty: "/faculty-dashboard",
       Admin: "/admin-dashboard",
     };
     return roleRoutes[userRole] || "/student-dashboard";
@@ -85,7 +88,7 @@ const EmailVerify = () => {
 
       if (data.success) {
         toast.success(data.message);
-        await getUserData();
+        await checkAuthState();
 
         const dashboardRoute = getDashboardRoute(
           data.user?.role || userData?.role

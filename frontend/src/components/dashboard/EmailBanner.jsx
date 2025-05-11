@@ -7,7 +7,10 @@ import { useNavigate } from "react-router-dom";
 
 const EmailVerificationBanner = () => {
   const navigate = useNavigate();
-  const { userData, backendUrl } = useContext(AppContent);
+  const { 
+    authState: { userData },
+    backendUrl 
+  } = useContext(AppContent);
 
   // Only show banner if user exists and email is not verified
   if (!userData || userData.isAccountVerified) {
@@ -32,8 +35,9 @@ const EmailVerificationBanner = () => {
   };
 
   return (
-    <div className="bg-yellow-200 text-yellow-800 text-sm p-3 flex items-center justify-between fixed top-16 left-0 w-full shadow-md z-40">
-      <span>
+    <div className="relative bg-yellow-200 text-yellow-800 text-sm p-3 flex items-center justify-between left-0 w-full shadow-md" 
+         style={{ top: "64px" }}>
+      <span className="flex-1 text-center md:text-left md:flex-none">
         ⚠️ Please verify your email address by clicking the link sent to{" "}
         <strong>{userData.email}</strong>.
       </span>
@@ -41,7 +45,7 @@ const EmailVerificationBanner = () => {
       <Link
         to="/email-verify"
         onClick={sendVerifyOtp}
-        className="font-semibold bg-white border-2 px-3 py-1 border-slate-500 rounded hover:bg-gray-50 transition-colors cursor-pointer"
+        className="font-semibold bg-white border-2 px-3 py-1 border-yellow-400 rounded hover:bg-gray-50 transition-colors cursor-pointer ml-2"
       >
         Verify Email
       </Link>

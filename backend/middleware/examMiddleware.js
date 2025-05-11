@@ -172,3 +172,22 @@ export const validateExamTiming = async (req, res, next) => {
   }
 };
 
+export const checkExistingAttempt = async (req, res, next) => {
+  try {
+    const existing = await ExamAttempt.findOne({
+      examId: req.params.examId,
+      studentId: req.user.id,
+      isActive: true
+    });
+
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: "Existing attempt in progress. Resume your exam first."
+      });
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+};

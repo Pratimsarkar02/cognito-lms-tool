@@ -59,7 +59,10 @@ examAttemptSchema.index(
     },
   }
 );
-examAttemptSchema.index({ examId: 1, studentId: 1 });
+examAttemptSchema.index(
+  { examId: 1, studentId: 1, isActive: 1 },
+  { unique: true, partialFilterExpression: { isActive: true } }
+);
 
 const examAttemptModel =
   mongoose.models["ExamAttempt"] ||
