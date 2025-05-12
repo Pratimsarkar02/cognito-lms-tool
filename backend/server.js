@@ -73,47 +73,104 @@ httpServer.listen(port, () => {
     console.log(`Server is running on PORT: ${port}`);
 });
 
+// Modification to the socket.io connection handler in server.js
+
 io.on('connection', (socket) => {
-    console.log(`Client connected: ${socket.id}`);
-  
-    socket.on('join-exam-room', async (attemptId) => {
-      try {
-        const attempt = await ExamAttempt.findById(attemptId).lean();
-        if (!attempt) return;
-  
-        const exam = await Exam.findById(attempt.examId).lean();
-        const totalDuration = exam.duration * 60;
-  
-        // Clear existing interval
-        if (socket.interval) clearInterval(socket.interval);
-  
-        // Initial time calculation
-        const elapsed = Math.floor((Date.now() - attempt.startTime) / 1000);
-        let remaining = Math.max(totalDuration - elapsed, 0);
-        socket.emit('timer-update', remaining);
-  
-        // Start synchronized updates
-        socket.interval = setInterval(async () => {
+  console.log(`Client connected: ${socket.id}`);
+
+  socket.on('join-exam-room', async (attemptId) => {
+    console.log(`Socket ${socket.id} joining exam room: ${attemptId}`);
+    try {
+      // Check if attempt exists
+      const attempt = await ExamAttempt.findById(attemptId).lean();
+      if (!attempt) {
+        console.log(`No exam attempt found for ID: ${attemptId}`);
+        socket.emit('exam-error', { message: 'Exam attempt not found' });
+        return;
+      }
+
+      // Get exam details
+      const exam = await Exam.findById(attempt.examId).lean();
+      if (!exam) {
+        console.log(`No exam found for attempt: ${attemptId}`);
+        socket.emit('exam-error', { message: 'Exam not found' });
+        return;
+      }
+
+      const totalDuration = exam.duration * 60;
+
+      // Clear existing interval
+      if (socket.interval) {
+        console.log(`Clearing existing interval for socket: ${socket.id}`);
+        clearInterval(socket.interval);
+      }
+
+      // Initial time calculation
+      const elapsed = Math.floor((Date.now() - attempt.startTime) / 1000);
+      let remaining = Math.max(totalDuration - elapsed, 0);
+      socket.emit('timer-update', remaining);
+      console.log(`Initial timer update for ${attemptId}: ${remaining} seconds remaining`);
+
+      // Start synchronized updates
+      socket.interval = setInterval(async () => {
+        try {
           const currentAttempt = await ExamAttempt.findById(attemptId).lean();
+          
+          // Check if attempt still exists
+          if (!currentAttempt) {
+            console.log(`Attempt ${attemptId} no longer exists, stopping timer`);
+            clearInterval(socket.interval);
+            socket.emit('exam-error', { message: 'Exam attempt no longer available' });
+            return;
+          }
+          
           const newElapsed = Math.floor((Date.now() - currentAttempt.startTime) / 1000);
           remaining = Math.max(totalDuration - newElapsed, 0);
           
           if (remaining <= 0) {
+            console.log(`Time expired for attempt ${attemptId}`);
             clearInterval(socket.interval);
             io.to(attemptId).emit('time-expired');
           }
           
           io.to(attemptId).emit('timer-update', remaining);
-        }, 1000);
-  
-        socket.join(attemptId);
-  
-      } catch (error) {
-        console.error('Socket error:', error);
-      }
-    });
-  
-    socket.on('disconnect', () => {
-      clearInterval(socket.interval);
-    });
+        } catch (error) {
+          console.error(`Timer interval error for attempt ${attemptId}:`, error);
+          clearInterval(socket.interval);
+          socket.emit('exam-error', { message: 'Error updating exam timer' });
+        }
+      }, 1000);
+
+      socket.join(attemptId);
+      console.log(`Socket ${socket.id} successfully joined room ${attemptId}`);
+
+      // Store the attempt ID on the socket for cleanup
+      socket.attemptId = attemptId;
+
+    } catch (error) {
+      console.error(`Socket error for ${socket.id}:`, error);
+      socket.emit('exam-error', { message: 'Server error' });
+    }
   });
+
+  socket.on('leave-exam-room', () => {
+    if (socket.attemptId) {
+      console.log(`Socket ${socket.id} leaving exam room: ${socket.attemptId}`);
+      socket.leave(socket.attemptId);
+      socket.attemptId = null;
+    }
+    
+    if (socket.interval) {
+      console.log(`Clearing interval for socket: ${socket.id}`);
+      clearInterval(socket.interval);
+      socket.interval = null;
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`Client disconnected: ${socket.id}`);
+    if (socket.interval) {
+      clearInterval(socket.interval);
+    }
+  });
+});

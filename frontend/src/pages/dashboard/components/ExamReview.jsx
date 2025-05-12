@@ -13,7 +13,7 @@ const ExamReview = () => {
   const [remainingTime, setRemainingTime] = useState(0);
   const [socket, setSocket] = useState(null);
   const [attemptId, setAttemptId] = useState(null);
-  const [isSticky, setIsSticky] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Reference for the header element
   const headerRef = useRef(null);
@@ -33,54 +33,84 @@ const ExamReview = () => {
     }
   }, [examId]);
 
-    // Separate handler for time expiration
-    const handleTimeExpired = async () => {
-      try {
-        // Get latest responses from localStorage
-        const savedData = localStorage.getItem(`examAttempt-${examId}`);
-        const currentResponses = savedData ? JSON.parse(savedData).responses : responses;
-        
-        // Submit responses to backend
-        await axios.post(
-          `${backendUrl}/api/responses/${examId}/batch`,
-          { responses: currentResponses },
-          { withCredentials: true }
-        );
-        
-        // Clean up localStorage
-        localStorage.removeItem(`examAttempt-${examId}`);
-        
-        // Show feedback and redirect
-        toast.info('Exam time has expired. Your responses have been submitted.');
-        navigate('/student-dashboard/exams');
-      } catch (error) {
-        console.error('Auto-submission error:', error);
-        toast.error('Error submitting responses automatically. Please contact support.');
-        
-        // Even if submission fails, we should navigate away
-        navigate('/student-dashboard/exams');
+  // Separate handler for time expiration
+  const handleTimeExpired = async () => {
+    try {
+      // Get latest responses from localStorage
+      const savedData = localStorage.getItem(`examAttempt-${examId}`);
+      const currentResponses = savedData ? JSON.parse(savedData).responses : {};
+      
+      // Submit responses to backend
+      await axios.post(
+        `${backendUrl}/api/responses/${examId}/batch`,
+        { responses: currentResponses },
+        { withCredentials: true }
+      );
+      
+      // Clean up localStorage
+      localStorage.removeItem(`examAttempt-${examId}`);
+      
+      // Clean up socket
+      if (socket) {
+        socket.emit('leave-exam-room');
+        socket.disconnect();
       }
-    };
+      
+      // Show feedback and redirect
+      toast.info('Exam time has expired. Your responses have been submitted.');
+      navigate('/student-dashboard/exams');
+    } catch (error) {
+      console.error('Auto-submission error:', error);
+      toast.error('Error submitting responses automatically. Please contact support.');
+      
+      // Even if submission fails, we should navigate away
+      navigate('/student-dashboard/exams');
+    }
+  };
     
   useEffect(() => {
+    let socketInstance = null;
+    
     const initializeReview = async () => {
+      setIsLoading(true);
       try {
-        // Get attempt details
-        const { data } = await axios.get(
-          `${backendUrl}/api/exams/${examId}/attempt`,
-          { withCredentials: true }
-        );
-
-        const currentAttemptId = data.attempt._id;
-        setAttemptId(currentAttemptId);
+        // Check if we have an attemptId from localStorage first
+        let currentAttemptId = attemptId;
+        
+        if (!currentAttemptId) {
+          // If not, get attempt details from API
+          const { data } = await axios.get(
+            `${backendUrl}/api/exams/${examId}/attempt`,
+            { withCredentials: true }
+          );
+          
+          currentAttemptId = data.attempt._id;
+          setAttemptId(currentAttemptId);
+        }
 
         // Initialize WebSocket
-        const newSocket = io(backendUrl);
-        newSocket.emit('join-exam-room', currentAttemptId);
-        newSocket.on('timer-update', setRemainingTime);
-        newSocket.on('time-expired', handleTimeExpired);
+        socketInstance = io(backendUrl);
+        socketInstance.on('connect', () => {
+          console.log('Review page socket connected:', socketInstance.id);
+          socketInstance.emit('join-exam-room', currentAttemptId);
+        });
         
-        setSocket(newSocket);
+        socketInstance.on('timer-update', (time) => {
+          setRemainingTime(time);
+        });
+        
+        socketInstance.on('time-expired', () => {
+          console.log('Review page time expired event received');
+          handleTimeExpired();
+        });
+        
+        socketInstance.on('exam-error', (error) => {
+          console.error('Review page exam error:', error);
+          toast.error(error.message || 'An error occurred with the exam');
+          navigate('/student-dashboard/exams');
+        });
+        
+        setSocket(socketInstance);
 
         // Load questions
         const questionsRes = await axios.get(
@@ -88,8 +118,10 @@ const ExamReview = () => {
           { withCredentials: true }
         );
         setQuestions(questionsRes.data.questions);
+        setIsLoading(false);
 
       } catch (error) {
+        console.error('Failed to load review data:', error);
         toast.error('Failed to load review data');
         navigate('/student-dashboard/exams');
       }
@@ -98,31 +130,13 @@ const ExamReview = () => {
     initializeReview();
 
     return () => {
-      if (socket) {
-        socket.disconnect();
+      if (socketInstance) {
+        console.log('Cleaning up review page socket connection');
+        socketInstance.emit('leave-exam-room');
+        socketInstance.disconnect();
       }
     };
   }, [examId, backendUrl, navigate]);
-  
-  // Set up scroll event listener for sticky header
-  useEffect(() => {
-    const handleScroll = () => {
-      if (headerRef.current) {
-        const headerRect = headerRef.current.getBoundingClientRect();
-        if (headerRect.top <= 0) {
-          setIsSticky(true);
-        } else {
-          setIsSticky(false);
-        }
-      }
-    };
-    
-    window.addEventListener('scroll', handleScroll);
-    
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
 
   const handleFinalSubmit = async () => {
     try {
@@ -132,12 +146,24 @@ const ExamReview = () => {
         { withCredentials: true }
       );
       
+      // Clean up localStorage
       localStorage.removeItem(`examAttempt-${examId}`);
+      
+      // Clean up socket
+      if (socket) {
+        socket.emit('leave-exam-room');
+        socket.disconnect();
+      }
+      
       toast.success('Exam submitted successfully!');
       navigate('/student-dashboard/exams');
     } catch (error) {
       toast.error('Submission failed: ' + (error.response?.data?.message || error.message));
     }
+  };
+
+  const handleBackToExam = () => {
+    navigate(`/student-dashboard/exams/${examId}/attempt`);
   };
 
   const formatTime = (seconds) => {
@@ -152,18 +178,19 @@ const ExamReview = () => {
     return Object.keys(responses).filter(key => responses[key]?.length > 0).length;
   };
 
+  if (isLoading) {
+    return <div className="p-6">Loading exam review...</div>;
+  }
+
   return (
     <div className="p-6">
       {/* Spacer div that takes up same height as header when header becomes fixed */}
-      {isSticky && (
-        <div className=" mb-6"></div> 
-      )}
+      <div className="mb-6"></div> 
       
       {/* Header with exam info and timer */}
       <div 
         ref={headerRef}
-        className={`bg-gray-800 text-white p-4 rounded-lg flex justify-between items-center mb-6
-          ${isSticky ? 'relative top-0 left-0 right-0 z-10 rounded-none px-6' : ''}`}
+        className="relative bg-gray-800 text-white p-4 rounded-lg flex justify-between items-center mb-6 z-10 px-6"
       >
         <div>
           <h1 className="text-2xl font-bold">Review Your Exam</h1>
@@ -212,14 +239,14 @@ const ExamReview = () => {
 
       <div className="flex gap-4 justify-end mt-6">
         <button
-          onClick={navigate(-1)}
-          className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+          onClick={handleBackToExam}
+          className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded cursor-pointer"
         >
           Back to Exam
         </button>
         <button
           onClick={handleFinalSubmit}
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded cursor-pointer"
         >
           Final Submit
         </button>
