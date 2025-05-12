@@ -18,7 +18,14 @@ import cron from 'node-cron';
 import { updateExamAnalytics } from './controllers/analyticsController.js';
 import Exam from './models/examModel.js';
 
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import ExamAttempt from './models/examAttemptModel.js';
+
 const app = express();
+
+const httpServer = createServer(app);
+
 const port = process.env.PORT || 5000;
 connectDB();
 
@@ -31,6 +38,13 @@ app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).send({ message:'Internal Server Error'});
 });
+
+const io = new Server(httpServer, {
+    cors: {
+        origin: allowedOrigins,
+        methods:["GET", "POST"]
+    }
+})
 
 //API Endpoints 
 app.get('/', (req, res) => res.send("API is running..."));
@@ -53,6 +67,53 @@ cron.schedule('0 * * * *', async () => {
     await Promise.all(exams.map(exam => updateExamAnalytics(exam._id)));
   });
 
-app.listen(port, () => {
+
+
+httpServer.listen(port, () => {
     console.log(`Server is running on PORT: ${port}`);
 });
+
+io.on('connection', (socket) => {
+    console.log(`Client connected: ${socket.id}`);
+  
+    socket.on('join-exam-room', async (attemptId) => {
+      try {
+        const attempt = await ExamAttempt.findById(attemptId).lean();
+        if (!attempt) return;
+  
+        const exam = await Exam.findById(attempt.examId).lean();
+        const totalDuration = exam.duration * 60;
+  
+        // Clear existing interval
+        if (socket.interval) clearInterval(socket.interval);
+  
+        // Initial time calculation
+        const elapsed = Math.floor((Date.now() - attempt.startTime) / 1000);
+        let remaining = Math.max(totalDuration - elapsed, 0);
+        socket.emit('timer-update', remaining);
+  
+        // Start synchronized updates
+        socket.interval = setInterval(async () => {
+          const currentAttempt = await ExamAttempt.findById(attemptId).lean();
+          const newElapsed = Math.floor((Date.now() - currentAttempt.startTime) / 1000);
+          remaining = Math.max(totalDuration - newElapsed, 0);
+          
+          if (remaining <= 0) {
+            clearInterval(socket.interval);
+            io.to(attemptId).emit('time-expired');
+          }
+          
+          io.to(attemptId).emit('timer-update', remaining);
+        }, 1000);
+  
+        socket.join(attemptId);
+  
+      } catch (error) {
+        console.error('Socket error:', error);
+      }
+    });
+  
+    socket.on('disconnect', () => {
+      clearInterval(socket.interval);
+    });
+  });

@@ -1,41 +1,128 @@
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AppContent } from '../../../contexts/AppContext';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { io } from 'socket.io-client';
 
 const ExamReview = () => {
   const { examId } = useParams();
   const navigate = useNavigate();
   const { backendUrl } = useContext(AppContent);
   const [questions, setQuestions] = useState([]);
-  const [timeLeft, setTimeLeft] = useState(0);
+  const [remainingTime, setRemainingTime] = useState(0);
+  const [socket, setSocket] = useState(null);
+  const [attemptId, setAttemptId] = useState(null);
+  const [isSticky, setIsSticky] = useState(false);
   
-  // Get responses from localStorage
-  const attemptData = JSON.parse(localStorage.getItem(`examAttempt-${examId}`));
-  const responses = attemptData?.responses || {};
+  // Reference for the header element
+  const headerRef = useRef(null);
 
-  console.log("Responses Collection in local storage:", responses);
+  // Get responses from localStorage
+  const [responses, setResponses] = useState({});
 
   useEffect(() => {
-    const loadData = async () => {
+    // Load responses from localStorage
+    const attemptData = localStorage.getItem(`examAttempt-${examId}`);
+    if (attemptData) {
+      const parsedData = JSON.parse(attemptData);
+      setResponses(parsedData.responses || {});
+      if (parsedData.attemptId) {
+        setAttemptId(parsedData.attemptId);
+      }
+    }
+  }, [examId]);
+
+    // Separate handler for time expiration
+    const handleTimeExpired = async () => {
       try {
-        // Fetch questions and attempt details
-        const [questionsRes, attemptRes] = await Promise.all([
-          axios.get(`${backendUrl}/api/questions/${examId}/questions`),
-          axios.get(`${backendUrl}/api/exams/${examId}/attempt`)
-        ]);
+        // Get latest responses from localStorage
+        const savedData = localStorage.getItem(`examAttempt-${examId}`);
+        const currentResponses = savedData ? JSON.parse(savedData).responses : responses;
         
-        setQuestions(questionsRes.data.questions);
-        setTimeLeft(attemptRes.data.attempt.duration * 60 - 
-          Math.floor((Date.now() - new Date(attemptRes.data.attempt.startTime)) / 1000));
+        // Submit responses to backend
+        await axios.post(
+          `${backendUrl}/api/responses/${examId}/batch`,
+          { responses: currentResponses },
+          { withCredentials: true }
+        );
+        
+        // Clean up localStorage
+        localStorage.removeItem(`examAttempt-${examId}`);
+        
+        // Show feedback and redirect
+        toast.info('Exam time has expired. Your responses have been submitted.');
+        navigate('/student-dashboard/exams');
       } catch (error) {
-        toast.error('Failed to load review data', error);
-        navigate('/student-dashboard/exams/:examId');
+        console.error('Auto-submission error:', error);
+        toast.error('Error submitting responses automatically. Please contact support.');
+        
+        // Even if submission fails, we should navigate away
+        navigate('/student-dashboard/exams');
       }
     };
-    loadData();
+    
+  useEffect(() => {
+    const initializeReview = async () => {
+      try {
+        // Get attempt details
+        const { data } = await axios.get(
+          `${backendUrl}/api/exams/${examId}/attempt`,
+          { withCredentials: true }
+        );
+
+        const currentAttemptId = data.attempt._id;
+        setAttemptId(currentAttemptId);
+
+        // Initialize WebSocket
+        const newSocket = io(backendUrl);
+        newSocket.emit('join-exam-room', currentAttemptId);
+        newSocket.on('timer-update', setRemainingTime);
+        newSocket.on('time-expired', handleTimeExpired);
+        
+        setSocket(newSocket);
+
+        // Load questions
+        const questionsRes = await axios.get(
+          `${backendUrl}/api/questions/${examId}/questions`,
+          { withCredentials: true }
+        );
+        setQuestions(questionsRes.data.questions);
+
+      } catch (error) {
+        toast.error('Failed to load review data');
+        navigate('/student-dashboard/exams');
+      }
+    };
+
+    initializeReview();
+
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+    };
   }, [examId, backendUrl, navigate]);
+  
+  // Set up scroll event listener for sticky header
+  useEffect(() => {
+    const handleScroll = () => {
+      if (headerRef.current) {
+        const headerRect = headerRef.current.getBoundingClientRect();
+        if (headerRect.top <= 0) {
+          setIsSticky(true);
+        } else {
+          setIsSticky(false);
+        }
+      }
+    };
+    
+    window.addEventListener('scroll', handleScroll);
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   const handleFinalSubmit = async () => {
     try {
@@ -44,21 +131,49 @@ const ExamReview = () => {
         { responses },
         { withCredentials: true }
       );
-      toast.success("Exam Submitted Successfully");
-      // Clear local storage
+      
       localStorage.removeItem(`examAttempt-${examId}`);
+      toast.success('Exam submitted successfully!');
       navigate('/student-dashboard/exams');
     } catch (error) {
-      toast.error('Submission failed: ' + error.message);
+      toast.error('Submission failed: ' + (error.response?.data?.message || error.message));
     }
+  };
+
+  const formatTime = (seconds) => {
+    if (!seconds && seconds !== 0) return "00:00:00";
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const getAnsweredCount = () => {
+    return Object.keys(responses).filter(key => responses[key]?.length > 0).length;
   };
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Review Your Exam</h1>
-        <div className="bg-gray-800 text-white p-2 rounded">
-          Time Left: {Math.floor(timeLeft/60)}:{timeLeft%60 < 10 ? '0' : ''}{timeLeft%60}
+      {/* Spacer div that takes up same height as header when header becomes fixed */}
+      {isSticky && (
+        <div className=" mb-6"></div> 
+      )}
+      
+      {/* Header with exam info and timer */}
+      <div 
+        ref={headerRef}
+        className={`bg-gray-800 text-white p-4 rounded-lg flex justify-between items-center mb-6
+          ${isSticky ? 'relative top-0 left-0 right-0 z-10 rounded-none px-6' : ''}`}
+      >
+        <div>
+          <h1 className="text-2xl font-bold">Review Your Exam</h1>
+          <p className="text-gray-300">
+            {getAnsweredCount()} of {questions.length} questions answered
+          </p>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl">{formatTime(remainingTime)}</div>
+          <div className="text-sm">Hrs | Min | Sec</div>
         </div>
       </div>
 
@@ -71,7 +186,7 @@ const ExamReview = () => {
                 key={optIndex}
                 className={`p-2 rounded ${
                   responses[question._id]?.includes(optIndex) 
-                    ? 'bg-blue-50 border-blue-200' 
+                    ? 'bg-blue-50 border border-blue-200' 
                     : 'bg-gray-50'
                 }`}
               >
@@ -87,19 +202,24 @@ const ExamReview = () => {
               </div>
             ))}
           </div>
+          <div className="mt-2 text-sm text-gray-500">
+            {!responses[question._id] || responses[question._id].length === 0 
+              ? <span className="text-red-500">Not answered</span> 
+              : <span className="text-green-500">Answered</span>}
+          </div>
         </div>
       ))}
 
       <div className="flex gap-4 justify-end mt-6">
         <button
-          onClick={() => navigate(-1)}
-          className="bg-gray-500 text-white px-4 py-2 rounded cursor-pointer"
+          onClick={navigate(-1)}
+          className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
         >
           Back to Exam
         </button>
         <button
           onClick={handleFinalSubmit}
-          className="bg-green-600 text-white px-4 py-2 rounded cursor-pointer"
+          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
         >
           Final Submit
         </button>
