@@ -29,28 +29,12 @@ const AdminDashboard = () => {
         />
         
         {/* Main Content Area - adjusts based on sidebar state */}
-        <main className={`flex-1 transition-all duration-300 pt-24 px-4 pb-8 ${isCollapsed ? 'md:ml-[70px]' : 'md:ml-64'}`}>
+        <main className={`transition-all duration-300 w-full ${
+          isCollapsed ? 'ml-20' : 'ml-64'
+        } p-4`}>
+            <EmailVerificationBanner />
           {/* Dashboard content */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h1 className="text-2xl font-semibold text-gray-800 mb-6">Admin Dashboard</h1>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Admin Dashboard Cards */}
-              <div className="bg-blue-50 p-6 rounded-lg border border-blue-100">
-                <h2 className="text-lg font-medium text-blue-700 mb-2">Total Users</h2>
-                <p className="text-3xl font-bold">120</p>
-              </div>
-              
-              <div className="bg-green-50 p-6 rounded-lg border border-green-100">
-                <h2 className="text-lg font-medium text-green-700 mb-2">Active Exams</h2>
-                <p className="text-3xl font-bold">8</p>
-              </div>
-              
-              <div className="bg-purple-50 p-6 rounded-lg border border-purple-100">
-                <h2 className="text-lg font-medium text-purple-700 mb-2">System Load</h2>
-                <p className="text-3xl font-bold">65%</p>
-              </div>
-            </div>
+          <div className="mt-18 bg-white rounded-lg shadow-sm p-1">
             
             {/* For nested routes */}
             <Outlet />

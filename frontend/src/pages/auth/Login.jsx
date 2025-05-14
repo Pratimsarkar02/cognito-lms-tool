@@ -78,7 +78,7 @@ const Login = () => {
   const getDashboardRoute = (userRole) => {
     const roleRoutes = {
       Student: "/student-dashboard",
-      Faculty: "/teacher-dashboard",
+      Faculty: "/faculty-dashboard",
       Admin: "/admin-dashboard",
     };
     return roleRoutes[userRole] || "/student-dashboard"; // fallback to student dashboard (by default)

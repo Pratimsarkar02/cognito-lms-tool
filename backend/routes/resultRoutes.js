@@ -3,7 +3,8 @@ import {
   getStudentResult,
   exportExamResults,
   getResults,
-  generateResults
+  generateResults,
+  getAllStudentResults
 } from '../controllers/resultController.js';
 import {
   isFacultyOrAdmin
@@ -20,12 +21,21 @@ router.post(
   generateResults
 );
 
-// Get Results (Authenticated users)
+// Get all results for logged-in user or specified student
+router.get(
+  '/all',
+  userAuth,
+  getAllStudentResults
+);
+
+// Get Results for a specific exam (Authenticated users)
 router.get(
   '/:examId',
   userAuth,
   getResults
 );
+
+
 
 // Export Results (Faculty/Admin only)
 router.get(

@@ -153,3 +153,70 @@ export const getResults = async (req, res) => {
     });
   }
 };
+
+// Add this function to your resultController.js file
+
+export const getAllStudentResults = async (req, res) => {
+  try {
+    const studentId = req.user.role === 'Student' ? req.user.id : req.query.studentId;
+    const isAdmin = req.user.role === 'Admin';
+    const isFaculty = req.user.role === 'Faculty';
+
+    let query = {};
+    
+    // For students, only show their own results
+    if (!isAdmin && !isFaculty) {
+      query.studentId = studentId;
+    } 
+    // For admin/faculty with a specific student requested
+    else if (req.query.studentId) {
+      query.studentId = req.query.studentId;
+    }
+    // For admin/faculty without specific student (show all if the all parameter is true)
+    else if (req.query.all === 'true') {
+      // Query remains empty to get all results
+    } else {
+      // Default to their associated exams if no parameter is provided
+      // This could be modified based on your business logic
+      query.createdBy = req.user.id;
+    }
+
+    const results = await Result.find(query)
+      .populate({
+        path: 'examId',
+        select: 'title totalMarks passingPercentage',
+      })
+      .populate({
+        path: 'studentId',
+        select: 'firstName lastName email',
+        model: 'user-details'
+      })
+      .populate({
+        path: 'bestAttemptId',
+        select: 'startTime endTime',
+        model: 'ExamAttempt'
+      });
+
+    // Validate results
+    const validatedResults = results.map(result => {
+      if (!result) return null;
+      
+      return {
+        ...result.toObject(),
+        percentage: Number((result.percentage || 0).toFixed(2)),
+        isPassed: (result.percentage || 0) >= (result.examId?.passingPercentage || 40)
+      };
+    }).filter(result => result !== null);
+
+    res.status(200).json({
+      success: true,
+      results: validatedResults
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};

@@ -309,6 +309,7 @@ lms-app
 │  │  │  ├─ dashboard
 │  │  │  │  ├─ EmailBanner.jsx
 │  │  │  │  ├─ ExamCard.jsx
+│  │  │  │  ├─ LoadingSkeleton.jsx
 │  │  │  │  ├─ Navbar.jsx
 │  │  │  │  ├─ Sidebar.jsx
 │  │  │  │  └─ Timer.jsx
@@ -336,8 +337,14 @@ lms-app
 │  │     │  ├─ AdminDashboard.jsx
 │  │     │  ├─ components
 │  │     │  │  ├─ DashboardHome.jsx
+│  │     │  │  ├─ ExamDetails.jsx
+│  │     │  │  ├─ ExamInstructionsModal.jsx
 │  │     │  │  ├─ ExamInterface.jsx
-│  │     │  │  └─ ExamList.jsx
+│  │     │  │  ├─ ExamList.jsx
+│  │     │  │  ├─ ExamResults.jsx
+│  │     │  │  ├─ ExamReview.jsx
+│  │     │  │  ├─ SettingsPage.jsx
+│  │     │  │  └─ UserProfile.jsx
 │  │     │  ├─ FacultyDashboard.jsx
 │  │     │  └─ StudentDashboard.jsx
 │  │     └─ landing

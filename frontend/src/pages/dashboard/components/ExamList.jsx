@@ -43,13 +43,16 @@ const ExamList = () => {
         search: state.searchQuery
       };
 
-      if(userData.role === 'Faculty') {
-        endpoint = '/api/exams/my-exams';
-        params.creatorId = userData._id;
-      }
-      
-      if(userData.role === 'Admin') {
-        endpoint = '/api/exams/all';
+      switch(userData?.role) {
+        case 'Faculty':
+          endpoint = '/api/exams/my-exams';
+          params.creatorId = userData._id;
+          break;
+        case 'Admin':
+          endpoint = '/api/exams/all';
+          break;
+        default:
+          endpoint = '/api/exams/active';
       }
 
       const { data } = await axios.get(`${backendUrl}${endpoint}`, {
@@ -62,6 +65,7 @@ const ExamList = () => {
         ...prev,
         exams: data.exams || [],
         totalPages: data.pagination?.totalPages || 1,
+        currentPage: data.pagination?.currentPage || 1,
         isLoading: false
       }));
     } catch (error) {
@@ -76,11 +80,9 @@ const ExamList = () => {
   }, [fetchExams]);
 
   // Update handleStartExam in ExamList.jsx
-const handleStartExam = (examId) => {
- 
-      navigate(`/student-dashboard/exams/${examId}`);
-    
-};
+  const handleStartExam = (examId) => {
+    navigate(`/student-dashboard/exams/${examId}`);
+  };
 
   // Delete exam handler
   const handleDeleteExam = async (examId) => {
@@ -103,22 +105,51 @@ const handleStartExam = (examId) => {
         {},
         { withCredentials: true }
       );
-      toast.success('Exam published');
+      toast.success('Exam Published');
       fetchExams(); // Refresh list
     } catch (error) {
       toast.error(error.response?.data?.message || 'Publish failed');
     }
   };
+  
+  // Unpublish exam handler
+  const handleUnpublishExam = async (examId) => {
+    try {
+      await axios.patch(
+        `${backendUrl}/api/exams/${examId}/unpublish`,
+        {},
+        { withCredentials: true }
+      );
+      toast.success('Exam Unpublished');
+      fetchExams(); // Refresh list
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Unpublish failed');
+    }
+  };
 
   // Edit exam navigation
   const handleEditExam = (examId) => {
-    navigate(`/faculty-dashboard/exams/edit/${examId}`);
+    navigate(`/faculty-dashboard/exams/${examId}/edit`);
   };
 
   // Handle pagination
   const handlePageChange = (newPage) => {
-    if(newPage >= 1 && newPage <= state.totalPages) {
-      setState(prev => ({ ...prev, currentPage: newPage }));
+    setState(prev => ({
+      ...prev,
+      currentPage: Math.max(1, Math.min(newPage, prev.totalPages))
+    }));
+  };
+
+  // Complete exam status handler
+  const handleStatusChange = async (examId, newStatus) => {
+    try {
+      await axios.patch(`${backendUrl}/api/exams/${examId}/${newStatus}`, {}, 
+        { withCredentials: true }
+      );
+      fetchExams();
+      toast.success(`Exam ${newStatus === 'publish' ? 'published' : 'unpublished'}`);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Status update failed');
     }
   };
 
@@ -128,13 +159,26 @@ const handleStartExam = (examId) => {
   };
 
   // Debounced search handler
-  const handleSearch = debounce((query) => {
+  const handleSearch = useCallback(debounce((query) => {
     setState(prev => ({
       ...prev,
       searchQuery: query,
       currentPage: 1
     }));
-  }, 500);
+  }, 500), []);
+
+  // Check if user is the creator of an exam
+  const isExamCreator = (exam) => {
+    // First check if createdBy exists and matches
+    if (exam.createdBy && (exam.createdBy === userData._id || exam.createdBy._id === userData._id)) {
+      return true;
+    }
+    // Then check if creatorId exists and matches
+    if (exam.creatorId && exam.creatorId === userData._id) {
+      return true;
+    }
+    return false;
+  };
 
   // Loading skeleton
   const renderSkeletons = () => (
@@ -151,12 +195,21 @@ const handleStartExam = (examId) => {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
+      <div className="mb-6 flex justify-between items-center">
         <input
           type="text"
           placeholder="Search exams..."
           className="w-full md:w-96 p-3 border rounded-lg"
+          onChange={(e) => handleSearch(e.target.value)}
         />
+        {(userData.role === "Faculty") && (
+          <button
+            onClick={() => navigate("create")}
+            className="ml-4 bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700"
+          >
+            Create New Exam
+          </button>
+        )}
       </div>
 
       <div className="overflow-x-auto exam-table">
@@ -168,6 +221,9 @@ const handleStartExam = (examId) => {
               <th className="p-3 text-left">Start Date</th>
               <th className="p-3 text-left">End Date</th>
               <th className="p-3 text-left">Actions</th>
+              {(userData.role === "Faculty" || userData.role === "Admin") && (
+                <th className="p-3 text-left">Status</th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -175,16 +231,73 @@ const handleStartExam = (examId) => {
               <tr key={exam._id} className="border-b">
                 <td className="p-3">{index + 1}.</td>
                 <td className="p-3 font-medium">{exam.title}</td>
-                <td className="p-3">{new Date(exam.startTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).slice(0, -12)}</td>
-                <td className="p-3">{new Date(exam.endTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).slice(0, -12)}</td>
                 <td className="p-3">
-                  <button
-                    onClick={() => handleStartExam(exam._id)}
-                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 cursor-pointer"
-                  >
-                    <PenTool className="relative inline mr-1" />
-                    Attempt
-                  </button>
+                  {new Date(exam.startTime)
+                    .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+                    .slice(0, -12)}
+                </td>
+                <td className="p-3">
+                  {new Date(exam.endTime)
+                    .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+                    .slice(0, -12)}
+                </td>
+                <td className="p-3 flex gap-2">
+                  {userData.role === "Student" && (
+                    <button
+                      onClick={() => handleStartExam(exam._id)}
+                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 cursor-pointer"
+                    >
+                      <PenTool className="relative inline mr-1" />
+                      Attempt
+                    </button>
+                  )}
+                  
+                  {/* Updated this conditional to use our helper function */}
+                  {isExamCreator(exam) && (
+                    <>
+                      <button
+                        onClick={() => handleEditExam(exam._id)}
+                        className="bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteExam(exam._id)}
+                        className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                  
+                  {userData.role === "Admin" && !isExamCreator(exam) && (
+                    <button
+                      onClick={() =>
+                        navigate(`/admin-dashboard/users/${exam.createdBy ? exam.createdBy._id || exam.createdBy : exam.creatorId}`)
+                      }
+                      className="bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700"
+                    >
+                      View Creator
+                    </button>
+                  )}
+                </td>
+                <td className="p-3">
+                  {(exam.status === "draft" && (isExamCreator(exam) || userData.role === 'Admin')) && (
+                    <button
+                      onClick={() => handlePublishExam(exam._id)}
+                      className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-700"
+                    >
+                      Publish
+                    </button>
+                  )}
+                  {(exam.status === "published" && (isExamCreator(exam) || userData.role === 'Admin')) && (
+                    <button
+                      onClick={() => handleUnpublishExam(exam._id)}
+                      className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-700"
+                    >
+                      Unpublish
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -196,8 +309,6 @@ const handleStartExam = (examId) => {
 };
 
 // Separate ExamCard component
-
-
 const ExamCard = ({ exam, userRole, onStart, onEdit, onDelete, onPublish }) => (
   <div className="bg-white p-4 rounded-lg shadow">
     <h3 className="font-semibold text-lg">{exam.title}</h3>
@@ -255,6 +366,7 @@ const ExamCard = ({ exam, userRole, onStart, onEdit, onDelete, onPublish }) => (
     )}
   </div>
 );
+
 ExamCard.propTypes = {
   exam: PropTypes.shape({
     title: PropTypes.string.isRequired,

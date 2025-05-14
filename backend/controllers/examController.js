@@ -141,7 +141,25 @@ export const unpublishExam = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+// Complete publish/unpublish handler
+export const toggleExamStatus = async (req, res) => {
+  try {
+    const exam = await Exam.findById(req.params.examId);
+    if (!exam) return res.status(404).json({ message: 'Exam not found' });
 
+    const newStatus = req.path.includes('publish') ? 'published' : 'draft';
+    exam.status = newStatus;
+    await exam.save();
+
+    res.json({
+      success: true,
+      message: `Exam ${newStatus} successfully`,
+      exam
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 export const listActiveExams = async (req, res) => {
     try {
       // Getting query parameters with defaults
@@ -382,6 +400,25 @@ export const completeExamAttempt = async (req, res) => {
       success: true,
       message: "Exam attempt completed",
       attempt
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+};
+
+// Add this to handle /my-exams route
+export const getMyExams = async (req, res) => {
+  try {
+    const exams = await Exam.find({ createdBy: req.user.id })
+      .sort('-createdAt')
+      .lean();
+
+    res.status(200).json({ 
+      success: true,
+      exams 
     });
   } catch (error) {
     res.status(500).json({ 

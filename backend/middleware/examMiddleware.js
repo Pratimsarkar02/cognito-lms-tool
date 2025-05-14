@@ -191,3 +191,22 @@ export const checkExistingAttempt = async (req, res, next) => {
     next(error);
   }
 };
+
+export const canViewExam = async (req, res, next) => {
+  try {
+    const exam = await Exam.findById(req.params.examId)
+      .populate('createdBy', 'role _id');
+    
+    if (!exam) return res.status(404).json({ message: 'Exam not found' });
+
+    if (req.user.role === 'Admin' || 
+        exam.createdBy._id.equals(req.user.id) ||
+        req.user.role === 'Student' && exam.status === 'published') {
+      return next();
+    }
+    
+    res.status(403).json({ message: 'Unauthorized access' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
