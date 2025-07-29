@@ -236,6 +236,7 @@ For any queries or suggestions, feel free to reach out!
 - **Email**: help.cognito@gmail.com
 - **GitHub**: [Pratimsarkar02](https://github.com/Pratimsarkar02)
 
+
 ```
 lms-app
 ├─ backend
@@ -336,14 +337,21 @@ lms-app
 │  │     ├─ dashboard
 │  │     │  ├─ AdminDashboard.jsx
 │  │     │  ├─ components
+│  │     │  │  ├─ CreateExam.jsx
 │  │     │  │  ├─ DashboardHome.jsx
+│  │     │  │  ├─ EditExam.jsx
 │  │     │  │  ├─ ExamDetails.jsx
 │  │     │  │  ├─ ExamInstructionsModal.jsx
 │  │     │  │  ├─ ExamInterface.jsx
 │  │     │  │  ├─ ExamList.jsx
 │  │     │  │  ├─ ExamResults.jsx
 │  │     │  │  ├─ ExamReview.jsx
+│  │     │  │  ├─ ManageQuestions.jsx
+│  │     │  │  ├─ QuestionEditor.jsx
+│  │     │  │  ├─ RoleEditor.jsx
 │  │     │  │  ├─ SettingsPage.jsx
+│  │     │  │  ├─ UserDetails.jsx
+│  │     │  │  ├─ UserManagement.jsx
 │  │     │  │  └─ UserProfile.jsx
 │  │     │  ├─ FacultyDashboard.jsx
 │  │     │  └─ StudentDashboard.jsx

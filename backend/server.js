@@ -111,35 +111,37 @@ io.on('connection', (socket) => {
       socket.emit('timer-update', remaining);
       console.log(`Initial timer update for ${attemptId}: ${remaining} seconds remaining`);
 
-      // Start synchronized updates
-      socket.interval = setInterval(async () => {
-        try {
-          const currentAttempt = await ExamAttempt.findById(attemptId).lean();
-          
-          // Check if attempt still exists
-          if (!currentAttempt) {
-            console.log(`Attempt ${attemptId} no longer exists, stopping timer`);
-            clearInterval(socket.interval);
-            socket.emit('exam-error', { message: 'Exam attempt no longer available' });
-            return;
-          }
-          
-          const newElapsed = Math.floor((Date.now() - currentAttempt.startTime) / 1000);
-          remaining = Math.max(totalDuration - newElapsed, 0);
-          
-          if (remaining <= 0) {
-            console.log(`Time expired for attempt ${attemptId}`);
-            clearInterval(socket.interval);
-            io.to(attemptId).emit('time-expired');
-          }
-          
-          io.to(attemptId).emit('timer-update', remaining);
-        } catch (error) {
-          console.error(`Timer interval error for attempt ${attemptId}:`, error);
-          clearInterval(socket.interval);
-          socket.emit('exam-error', { message: 'Error updating exam timer' });
-        }
-      }, 1000);
+// In your server.js socket handler, modify the timer logic
+socket.interval = setInterval(async () => {
+  try {
+    const currentAttempt = await ExamAttempt.findById(attemptId).lean();
+    
+    if (!currentAttempt) {
+      console.log(`Attempt ${attemptId} no longer exists, stopping timer`);
+      clearInterval(socket.interval);
+      socket.emit('exam-error', { message: 'Exam attempt no longer available' });
+      return;
+    }
+
+    const newElapsed = Math.floor((Date.now() - currentAttempt.startTime) / 1000);
+    remaining = Math.max(totalDuration - newElapsed, 0);
+    
+    // Emit time-expired when official time is up (timer shows 0)
+    if (remaining <= 0) {
+      console.log(`Time expired for attempt ${attemptId}`);
+      clearInterval(socket.interval);
+      io.to(attemptId).emit('time-expired');
+      return;
+    }
+
+    io.to(attemptId).emit('timer-update', remaining);
+  } catch (error) {
+    console.error(`Timer interval error for attempt ${attemptId}:`, error);
+    clearInterval(socket.interval);
+    socket.emit('exam-error', { message: 'Error updating exam timer' });
+  }
+}, 1000);
+
 
       socket.join(attemptId);
       console.log(`Socket ${socket.id} successfully joined room ${attemptId}`);

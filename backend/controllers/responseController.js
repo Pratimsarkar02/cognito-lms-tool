@@ -311,10 +311,24 @@ export const submitBatchResponses = async (req, res) => {
       });
     }
 
+        // **ADD: Check if this is a grace period submission**
+    const exam = await Exam.findById(examId).lean();
+    const elapsedSeconds = (Date.now() - attempt.startTime) / 1000;
+    const examDurationSeconds = exam.duration * 60;
+    
+    if (elapsedSeconds > examDurationSeconds) {
+      console.log(`Grace period auto-submission detected:`, {
+        attemptId: attempt._id,
+        examId,
+        studentId,
+        overtimeSeconds: elapsedSeconds - examDurationSeconds,
+        timestamp: new Date()
+      });
+    }
+
     // 2. Pre-Fetch Required Data
-    const [questions, exam] = await Promise.all([
-      Question.find({ examId }).lean(),
-      Exam.findById(examId).lean()
+    const [questions] = await Promise.all([
+      Question.find({ examId }).lean()
     ]);
 
     // 3. Precompute Grading Data using functional approach

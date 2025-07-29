@@ -150,17 +150,29 @@ export const validateExamTiming = async (req, res, next) => {
     // Get exam duration
     const exam = await Exam.findById(examId);
     const elapsedSeconds = (Date.now() - attempt.startTime) / 1000;
-
-    if (elapsedSeconds > exam.duration * 60) {
+    const examDurationSeconds = exam.duration * 60;
+    
+    // **CRITICAL FIX: Add grace period for auto-submit**
+    const gracePeriodSeconds = 10; // 10 seconds grace period
+    const maxAllowedTime = examDurationSeconds + gracePeriodSeconds;
+    
+    // Check if we're beyond the grace period
+    if (elapsedSeconds > maxAllowedTime) {
+      // Only close the attempt if it's still active and beyond grace period
       await ExamAttempt.findByIdAndUpdate(attempt._id, {
         isActive: false,
         isCompleted: true
       });
-      
+
       return res.status(403).json({
         success: false,
-        message: "Exam time expired"
+        message: "Exam submission window has closed"
       });
+    }
+
+    // If within grace period but past official time, allow submission but log it
+    if (elapsedSeconds > examDurationSeconds && elapsedSeconds <= maxAllowedTime) {
+      console.log(`Grace period submission for attempt ${attempt._id}: ${elapsedSeconds - examDurationSeconds} seconds overtime`);
     }
 
     next();
@@ -171,6 +183,7 @@ export const validateExamTiming = async (req, res, next) => {
     });
   }
 };
+
 
 export const checkExistingAttempt = async (req, res, next) => {
   try {

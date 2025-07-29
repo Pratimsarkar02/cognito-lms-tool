@@ -186,6 +186,102 @@ export const getExamQuestions = async (req, res) => {
   }
 };
 
+// Get questions for management (without requiring active exam)
+export const getExamQuestionsForManagement = async (req, res) => {
+  try {
+    const { examId } = req.params;
+
+    // Get all questions for this exam in original order (no shuffling)
+    const questions = await Question.find({ examId })
+      .sort('createdAt') // Original creation order
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      questions: questions || []
+    });
+
+  } catch (error) {
+    console.error('Error fetching questions for management:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Delete individual question
+export const deleteIndividualQuestion = async (req, res) => {
+  try {
+    const { questionId } = req.params;
+
+    const question = await Question.findByIdAndDelete(questionId);
+    
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: "Question not found"
+      });
+    }
+
+    // Update exam's total marks after deletion
+    await updateExamTotalMarks(question.examId);
+
+    res.status(200).json({
+      success: true,
+      message: "Question deleted successfully",
+      deletedQuestion: question
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Update individual question
+export const updateIndividualQuestion = async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    const updates = req.body;
+
+    const question = await Question.findByIdAndUpdate(
+      questionId,
+      {
+        questionText: updates.questionText,
+        questionType: updates.questionType,
+        options: updates.options,
+        marks: updates.marks,
+        explanation: updates.explanation || ''
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: "Question not found"
+      });
+    }
+
+    await updateExamTotalMarks(question.examId);
+
+    res.status(200).json({
+      success: true,
+      message: "Question updated successfully",
+      question
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 const updateExamTotalMarks = async (examId) => {
     try {
       const questions = await Question.find({ examId });

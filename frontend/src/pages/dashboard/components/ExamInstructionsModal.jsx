@@ -91,9 +91,9 @@ const ExamInstructionsModal = () => {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
       <div className="bg-white p-6 rounded-lg max-w-2xl">
         <h2 className="text-2xl font-bold mb-4">General Instructions</h2>
-        <div className="mb-4">
-          {state.exam.instructions || "Please read all instructions carefully before starting the exam."}
-        </div>
+        <div className="mb-4 prose max-w-none "
+          dangerouslySetInnerHTML={{ __html: state.exam.instructions || "Please read all instructions carefully before starting the exam."}}
+        />
         
         <div className="mt-6 flex items-center gap-4">
           <label>

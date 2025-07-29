@@ -3,7 +3,10 @@ import {
   addQuestion,
   updateQuestion,
   getExamQuestions,
-  deleteQuestion
+  deleteQuestion,
+  getExamQuestionsForManagement,
+  updateIndividualQuestion,
+  deleteIndividualQuestion
 } from '../controllers/questionController.js';
 import { checkAttemptExists } from '../middleware/checkAttemptExists.js';
 import {
@@ -29,16 +32,16 @@ router.post(
   addQuestion
 );
 
-// Update Question (Exam Creator only)
-router.put(
-  '/:questionId/update',
+// NEW: Get Questions for Management (Faculty/Admin only) - NO ACTIVE EXAM REQUIRED
+router.get(
+  '/:examId/questions/manage',
   userAuth,
   isFacultyOrAdmin,
   isExamCreator,
-  updateQuestion
+  getExamQuestionsForManagement
 );
 
-// Get Exam Questions (Any authenticated user + Active exam)
+// Get Exam Questions (Requires Active exam + attempt)
 router.get(
   '/:examId/questions',
   userAuth,
@@ -46,6 +49,36 @@ router.get(
   checkAttemptExists,
   getExamQuestions
 );
+
+// NEW: Update Individual Question
+router.put(
+  '/question/:questionId/update',
+  userAuth,
+  isFacultyOrAdmin,
+  isQuestionOwner,
+  updateIndividualQuestion
+);
+
+// NEW: Delete Individual Question
+router.delete(
+  '/question/:questionId/delete',
+  userAuth,
+  isFacultyOrAdmin,
+  isQuestionOwner,
+  deleteIndividualQuestion
+);
+
+// Legacy Routes (Keep for Backward compatibility)
+
+// Update Question (Exam Creator only)
+router.put(
+  '/:questionId/update',
+  userAuth,
+  isFacultyOrAdmin,
+  isQuestionOwner,
+  updateQuestion
+);
+
 //Delete Question (Exam Creator only)
 router.delete(
   '/:questionId/delete',

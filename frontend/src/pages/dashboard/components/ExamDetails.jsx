@@ -66,7 +66,9 @@ const ExamDetails = () => {
         {/* Header */}
         <div className="mb-4 text-center">
           <h1 className="text-3xl font-bold text-indigo-900">{state.exam.title}</h1>
-          <p className="mt-1 text-indigo-700 italic">{state.exam.description}</p>
+          <p className="mt-1 text-indigo-700 italic prose max-w-none"
+          dangerouslySetInnerHTML={{ __html: state.exam.description || 'No description provided' }}
+          />
         </div>
         {/* Details Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">

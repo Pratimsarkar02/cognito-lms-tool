@@ -56,87 +56,164 @@ const ExamInterface = () => {
     }
   };
   
-  // Initialize WebSocket and exam data
-  useEffect(() => {
-    let socketInstance = null;
+// Initialize WebSocket and exam data
+useEffect(() => {
+  let socketInstance = null;
+
+  const initializeExam = async () => {
+    setIsLoading(true);
+    try {
+      // 1. Get active attempt
+      const { data } = await axios.get(
+        `${backendUrl}/api/exams/${examId}/attempt`,
+        { withCredentials: true }
+      );
+
+      // 2. Store attempt ID
+      const attemptId = data.attempt._id;
+
+      // 3. Get exam details and questions
+      const [examRes, questionsRes] = await Promise.all([
+        axios.get(`${backendUrl}/api/exams/${examId}`, { withCredentials: true }),
+        axios.get(`${backendUrl}/api/questions/${examId}/questions`, { withCredentials: true })
+      ]);
+
+      // 4. Initialize state
+      setExamData({
+        questions: questionsRes.data.questions,
+        duration: examRes.data.duration,
+        title: examRes.data.title,
+        attemptId
+      });
+
+      // 5. Initialize WebSocket
+      socketInstance = io(backendUrl);
+      
+      socketInstance.on('connect', () => {
+        console.log('Socket connected:', socketInstance.id);
+        socketInstance.emit('join-exam-room', attemptId);
+      });
+
+      socketInstance.on('timer-update', (time) => {
+        console.log('Timer update:', time);
+        setServerTime(time);
+      });
+
+      // **FIX: Define handleTimeExpired inside useEffect to avoid stale closure**
+      const handleTimeExpired = async () => {
+  console.log('=== AUTO-SUBMIT TRIGGERED ===');
+  try {
+    // 1. Get and validate data
+    const savedData = localStorage.getItem(`examAttempt-${examId}`);
+    console.log('LocalStorage data:', savedData);
     
-    const initializeExam = async () => {
-      setIsLoading(true);
-      try {
-        // 1. Get active attempt
-        const { data } = await axios.get(
-          `${backendUrl}/api/exams/${examId}/attempt`,
-          { withCredentials: true }
-        );
+    if (!savedData) {
+      console.log('No saved data found');
+      toast.info('No responses to submit.');
+      navigate('/student-dashboard/exams');
+      return;
+    }
 
-        // 2. Store attempt ID
-        const attemptId = data.attempt._id;
-        
-        // 3. Get exam details and questions
-        const [examRes, questionsRes] = await Promise.all([
-          axios.get(`${backendUrl}/api/exams/${examId}`, { withCredentials: true }),
-          axios.get(`${backendUrl}/api/questions/${examId}/questions`, { withCredentials: true })
-        ]);
+    const parsedData = JSON.parse(savedData);
+    const currentResponses = parsedData.responses || {};
+    
+    console.log('Parsed responses:', currentResponses);
+    console.log('Number of responses:', Object.keys(currentResponses).length);
 
-        // 4. Initialize state
-        setExamData({
-          questions: questionsRes.data.questions,
-          duration: examRes.data.duration,
-          title: examRes.data.title,
-          attemptId
-        });
+    // 2. Check authentication
+    await axios.get(`${backendUrl}/api/user/data`, {
+      withCredentials: true
+    });
 
-        // 5. Initialize WebSocket
-        socketInstance = io(backendUrl);
-        socketInstance.on('connect', () => {
-          console.log('Socket connected:', socketInstance.id);
-          socketInstance.emit('join-exam-room', attemptId);
-        });
-        
-        socketInstance.on('timer-update', (time) => {
-          console.log('Timer update:', time);
-          setServerTime(time);
-        });
-        
-        socketInstance.on('time-expired', () => {
-          console.log('Time expired event received');
-          handleTimeExpired();
-        });
-        
-        socketInstance.on('exam-error', (error) => {
-          console.error('Exam error:', error);
-          toast.error(error.message || 'An error occurred with the exam');
-          navigate('/student-dashboard/exams');
-        });
-        
-        setSocket(socketInstance);
+    // 3. Submit responses
+    console.log('Submitting to:', `${backendUrl}/api/responses/${examId}/batch`);
+    
+    const response = await axios.post(
+      `${backendUrl}/api/responses/${examId}/batch`,
+      { responses: currentResponses },
+      { 
+        withCredentials: true,
+        timeout: 10000 // 10 second timeout
+      }
+    );
 
-        // 6. Initialize responses from localStorage
-        const saved = localStorage.getItem(`examAttempt-${examId}`);
-        if (saved) {
-          const savedData = JSON.parse(saved);
-          setResponses(savedData.responses || {});
-          setCurrentQuestion(savedData.currentQuestion || 0);
-        }
-        
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Exam initialization error:', error);
-        toast.error('Failed to initialize exam');
+    console.log('Submission response:', response.data);
+
+    // 4. Cleanup
+    localStorage.removeItem(`examAttempt-${examId}`);
+
+    if (socketInstance) {
+      socketInstance.emit('leave-exam-room');
+      socketInstance.disconnect();
+    }
+
+    toast.success('Exam submitted successfully due to time expiry.');
+    navigate('/student-dashboard/exams');
+
+  } catch (error) {
+    console.error('=== AUTO-SUBMIT ERROR ===');
+    console.error('Error type:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Response status:', error.response?.status);
+    console.error('Response data:', error.response?.data);
+    console.error('Full error:', error);
+
+    // Specific error handling
+    let errorMessage = 'Error submitting responses automatically.';
+    
+    if (error.code === 'ECONNABORTED') {
+      errorMessage = 'Submission timeout. Please check your connection.';
+    } else if (error.response?.status === 401) {
+      errorMessage = 'Authentication failed. Please login again.';
+    } else if (error.response?.status === 404) {
+      errorMessage = 'Exam not found.';
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    }
+
+    toast.error(errorMessage);
+    navigate('/student-dashboard/exams');
+  }
+};
+
+
+      socketInstance.on('time-expired', handleTimeExpired);
+
+      socketInstance.on('exam-error', (error) => {
+        console.error('Exam error:', error);
+        toast.error(error.message || 'An error occurred with the exam');
         navigate('/student-dashboard/exams');
-      }
-    };
+      });
 
-    initializeExam();
+      setSocket(socketInstance);
 
-    return () => {
-      if (socketInstance) {
-        console.log('Cleaning up socket connection');
-        socketInstance.emit('leave-exam-room');
-        socketInstance.disconnect();
+      // 6. Initialize responses from localStorage
+      const saved = localStorage.getItem(`examAttempt-${examId}`);
+      if (saved) {
+        const savedData = JSON.parse(saved);
+        setResponses(savedData.responses || {});
+        setCurrentQuestion(savedData.currentQuestion || 0);
       }
-    };
-  }, [examId, backendUrl, navigate]);
+
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Exam initialization error:', error);
+      toast.error('Failed to initialize exam');
+      navigate('/student-dashboard/exams');
+    }
+  };
+
+  initializeExam();
+
+  return () => {
+    if (socketInstance) {
+      console.log('Cleaning up socket connection');
+      socketInstance.emit('leave-exam-room');
+      socketInstance.disconnect();
+    }
+  };
+}, [examId, backendUrl, navigate]);
+
 
   // Save responses to localStorage
   useEffect(() => {
@@ -231,8 +308,14 @@ const ExamInterface = () => {
         {examData.questions[currentQuestion] && (
           <>
             <h3 className="text-lg font-semibold mb-4">
-              Q{currentQuestion + 1}. {examData.questions[currentQuestion].questionText}
-            </h3>
+        <span>Q{currentQuestion + 1}. </span>
+        <div 
+          className="inline"
+          dangerouslySetInnerHTML={{ 
+            __html: examData.questions[currentQuestion].questionText || 'Question text not available' 
+          }}
+        />
+      </h3>
 
             <div className="space-y-2">
               {examData.questions[currentQuestion].options.map((option, index) => {

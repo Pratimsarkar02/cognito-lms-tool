@@ -1,108 +1,583 @@
-import { useEffect, useState, useContext } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AppContent } from '../../../contexts/AppContext';
 import axios from 'axios';
-import DateTimePicker from 'react-datetime-picker';
-import ReactQuill from 'react-quill';
 import { toast } from 'react-toastify';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
+import { 
+  Calendar, 
+  FileText, 
+  Settings, 
+  Save, 
+  ArrowLeft, 
+  AlertCircle,
+  Eye,
+  Edit3,
+  CheckCircle
+} from 'lucide-react';
 
 const EditExam = () => {
-  const {authState:{userData}, backendUrl} = useContext(AppContent);
-  const [exam, setExam] = useState(null);
-  const navigate = useNavigate();
   const { examId } = useParams();
+  const navigate = useNavigate();
+  const { backendUrl, authState: { userData } } = useContext(AppContent);
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setSaving] = useState(false);
+  const [originalExam, setOriginalExam] = useState(null);
+  
   const [examData, setExamData] = useState({
     title: '',
     description: '',
     startTime: '',
     endTime: '',
     duration: 60,
-    totalMarks: 100,
-    isNegativeMarking: false
+    maxAttempts: 1,
+    isShuffleQuestions: true,
+    isNegativeMarking: false,
+    negativeMarkingPercentage: 25,
+    passingPercentage: 40,
+    instructions: '',
+    status: 'draft'
   });
-  
-  useEffect(() => {
-    const fetchExam = async () => {
-      const { data } = await axios.get(`${backendUrl}/api/exams/${examId}`);
-      setExam(data.exam);
-    };
-    fetchExam();
-  }, [examId]);
 
-  const handleSubmit = async (e) => {
-      e.preventDefault();
+  // React Quill configuration
+  const quillModules = {
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+      [{ 'indent': '-1'}, { 'indent': '+1' }],
+      ['link'],
+      [{ 'color': [] }, { 'background': [] }],
+      [{ 'align': [] }],
+      ['clean']
+    ]
+  };
+
+  const quillFormats = [
+    'header', 'bold', 'italic', 'underline', 'strike',
+    'list', 'bullet', 'indent', 'link', 'color', 'background', 'align'
+  ];
+
+  // Load exam data
+  useEffect(() => {
+    const loadExam = async () => {
+      setIsLoading(true);
       try {
-        const payload = {
-          ...examData,
-          creatorId: userData._id,
-          status: 'draft'
-        };
-  
-        const { data } = await axios.post(`${backendUrl}/api/exams`, payload, {
+        const { data } = await axios.get(`${backendUrl}/api/exams/${examId}`, {
           withCredentials: true
         });
         
-        toast.success('Exam created successfully!');
-        navigate(`/faculty-dashboard/exams/${data.exam._id}/questions`);
+        const exam = data.exam;
+        setOriginalExam(exam);
+        
+        // Format dates for datetime-local input
+        const formatDateTimeForInput = (date) => {
+          if (!date) return '';
+          const d = new Date(date);
+          return d.toISOString().slice(0, 16);
+        };
+        
+        setExamData({
+          title: exam.title || '',
+          description: exam.description || '',
+          startTime: formatDateTimeForInput(exam.startTime),
+          endTime: formatDateTimeForInput(exam.endTime),
+          duration: exam.duration || 60,
+          maxAttempts: exam.maxAttempts || 1,
+          isShuffleQuestions: exam.isShuffleQuestions ?? true,
+          isNegativeMarking: exam.isNegativeMarking || false,
+          negativeMarkingPercentage: exam.negativeMarkingPercentage || 25,
+          passingPercentage: exam.passingPercentage || 40,
+          instructions: exam.instructions || '',
+          status: exam.status || 'draft'
+        });
+        
       } catch (error) {
-        toast.error(error.response?.data?.message || 'Exam creation failed');
+        console.error('Error loading exam:', error);
+        toast.error('Failed to load exam details');
+        navigate(`/${userData.role.toLowerCase()}-dashboard/exams`);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-  return (
-      <div className="p-6 max-w-3xl mx-auto">
-        <h2 className="text-2xl font-bold mb-6">Create New Exam</h2>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium mb-1">Exam Title</label>
-            <input
-              type="text"
-              required
-              className="w-full p-2 border rounded"
-              value={examData.title}
-              onChange={(e) => setExamData({ ...examData, title: e.target.value })}
-            />
-          </div>
-  
-          <div>
-            <label className="block text-sm font-medium mb-1">Description</label>
-            <ReactQuill
-              theme="snow"
-              value={examData.description}
-              onChange={(value) => setExamData({ ...examData, description: value })}
-              className="h-40 mb-8"
-            />
-          </div>
-            <div>
-              <div className="flex gap-6"><div className="flex-1">
-                  <label className="block text-sm font-medium mb-1">Start Time</label>
-                  <DateTimePicker
-                    onChange={(value) => setExamData({ ...examData, startTime: value })}
-                    value={examData.startTime}
-                    className="w-full"
-                    format="y-MM-dd h:mm a"
-                    required
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium mb-1">End Time</label>
-                  <DateTimePicker
-                    onChange={(value) => setExamData({ ...examData, endTime: value })}
-                    value={examData.endTime}
-                    className="w-full"
-                    format="y-MM-dd h:mm a"
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-          {/* Add more form fields for exam details */}
-          <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded">
-            Create Exam
-          </button>
-        </form>
+    loadExam();
+  }, [examId, backendUrl, navigate, userData.role]);
+
+  // Handle input changes
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setExamData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  // Handle Quill editor changes
+  const handleDescriptionChange = (content) => {
+    setExamData(prev => ({
+      ...prev,
+      description: content
+    }));
+  };
+
+  const handleInstructionsChange = (content) => {
+    setExamData(prev => ({
+      ...prev,
+      instructions: content
+    }));
+  };
+
+  // Validate form data
+  const validateForm = () => {
+    const errors = [];
+
+    if (!examData.title.trim()) {
+      errors.push('Exam title is required');
+    }
+
+    if (!examData.startTime) {
+      errors.push('Start time is required');
+    }
+
+    if (!examData.endTime) {
+      errors.push('End time is required');
+    }
+
+    if (new Date(examData.startTime) >= new Date(examData.endTime)) {
+      errors.push('End time must be after start time');
+    }
+
+    // Only validate future start time for draft exams
+    if (examData.status === 'draft' && new Date(examData.startTime) <= new Date()) {
+      errors.push('Start time must be in the future for draft exams');
+    }
+
+    if (examData.duration <= 0) {
+      errors.push('Duration must be greater than 0');
+    }
+
+    if (examData.passingPercentage < 0 || examData.passingPercentage > 100) {
+      errors.push('Passing percentage must be between 0 and 100');
+    }
+
+    if (examData.maxAttempts < 0) {
+      errors.push('Max attempts cannot be negative');
+    }
+
+    if (examData.isNegativeMarking && (examData.negativeMarkingPercentage < 0 || examData.negativeMarkingPercentage > 100)) {
+      errors.push('Negative marking percentage must be between 0 and 100');
+    }
+
+    return errors;
+  };
+
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    const errors = validateForm();
+    if (errors.length > 0) {
+      errors.forEach(error => toast.error(error));
+      return;
+    }
+
+    setSaving(true);
+    
+    try {
+      const payload = {
+        title: examData.title.trim(),
+        description: examData.description,
+        startTime: examData.startTime,
+        endTime: examData.endTime,
+        duration: parseInt(examData.duration),
+        maxAttempts: parseInt(examData.maxAttempts),
+        isShuffleQuestions: examData.isShuffleQuestions,
+        isNegativeMarking: examData.isNegativeMarking,
+        negativeMarkingPercentage: examData.isNegativeMarking ? parseFloat(examData.negativeMarkingPercentage) : 0,
+        passingPercentage: parseFloat(examData.passingPercentage),
+        instructions: examData.instructions
+      };
+
+      const response = await axios.put(
+        `${backendUrl}/api/exams/${examId}`,
+        payload,
+        { withCredentials: true }
+      );
+
+      if (response.data.success) {
+        toast.success('Exam updated successfully!');
+        navigate(`/${userData.role.toLowerCase()}-dashboard/exams`);
+      }
+    } catch (error) {
+      console.error('Error updating exam:', error);
+      toast.error(error.response?.data?.message || 'Failed to update exam');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle cancel
+  const handleCancel = () => {
+    navigate(`/${userData.role.toLowerCase()}-dashboard/exams`);
+  };
+
+  // Navigate to question management
+  const handleManageQuestions = () => {
+    navigate(`/${userData.role.toLowerCase()}-dashboard/exams/${examId}/questions`);
+  };
+
+  // Check if exam has been modified
+  const hasChanges = () => {
+    if (!originalExam) return false;
+    
+    return (
+      examData.title !== (originalExam.title || '') ||
+      examData.description !== (originalExam.description || '') ||
+      examData.startTime !== new Date(originalExam.startTime).toISOString().slice(0, 16) ||
+      examData.endTime !== new Date(originalExam.endTime).toISOString().slice(0, 16) ||
+      examData.duration !== originalExam.duration ||
+      examData.maxAttempts !== originalExam.maxAttempts ||
+      examData.isShuffleQuestions !== originalExam.isShuffleQuestions ||
+      examData.isNegativeMarking !== originalExam.isNegativeMarking ||
+      examData.negativeMarkingPercentage !== originalExam.negativeMarkingPercentage ||
+      examData.passingPercentage !== originalExam.passingPercentage ||
+      examData.instructions !== (originalExam.instructions || '')
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
       </div>
     );
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto p-6">
+      <div className="bg-white rounded-lg shadow-sm border">
+        {/* Header */}
+        <div className="px-6 py-4 border-b">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Edit3 className="h-6 w-6 text-blue-600" />
+              <div>
+                <h1 className="text-2xl font-semibold text-gray-900">Edit Exam</h1>
+                <p className="text-sm text-gray-500">
+                  {originalExam?.title || 'Loading...'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              {originalExam && (
+                <div className="flex items-center space-x-2">
+                  <span className={`px-2 py-1 text-xs rounded-full ${
+                    originalExam.status === 'published' 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {originalExam.status === 'published' ? 'Published' : 'Draft'}
+                  </span>
+                  <span className="text-sm text-gray-500">
+                    Total Marks: {originalExam.totalMarks || 0}
+                  </span>
+                </div>
+              )}
+              
+              <button
+                onClick={handleManageQuestions}
+                className="px-4 py-2 cursor-pointer text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center space-x-2 transition-colors"
+              >
+                <FileText className="h-4 w-4" />
+                <span>Manage Questions</span>
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="px-4 py-2 cursor-pointer text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center space-x-2 transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Back to Exams</span>
+              </button>
+              
+              <button
+                type="submit"
+                form="edit-exam-form"
+                disabled={isSaving || !hasChanges()}
+                className="px-4 py-2 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save className="h-4 w-4" />
+                <span>{isSaving ? 'Updating...' : 'Update Exam'}</span>
+              </button>
+            </div>
+          </div>
+          
+          {hasChanges() && (
+            <div className="mt-3 flex items-center space-x-2 text-sm text-orange-600 bg-orange-50 px-3 py-2 rounded-lg">
+              <AlertCircle className="h-4 w-4" />
+              <span>You have unsaved changes</span>
+            </div>
+          )}
+        </div>
+
+        {/* Form */}
+        <form id="edit-exam-form" onSubmit={handleSubmit} className="p-6 space-y-8">
+          {/* Basic Information */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="lg:col-span-2">
+              <div className="flex items-center space-x-2 mb-4">
+                <FileText className="h-5 w-5 text-blue-600" />
+                <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
+              </div>
+            </div>
+
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Exam Title *
+              </label>
+              <input
+                type="text"
+                name="title"
+                value={examData.title}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter exam title"
+                required
+              />
+            </div>
+
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description
+              </label>
+              <div className="border border-gray-300 rounded-lg">
+                <ReactQuill
+                  theme="snow"
+                  value={examData.description}
+                  onChange={handleDescriptionChange}
+                  modules={quillModules}
+                  formats={quillFormats}
+                  placeholder="Enter exam description..."
+                  style={{ height: '150px', marginBottom: '42px' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Timing Configuration */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="lg:col-span-2">
+              <div className="flex items-center space-x-2 mb-4">
+                <Calendar className="h-5 w-5 text-blue-600" />
+                <h3 className="text-lg font-medium text-gray-900">Timing Configuration</h3>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Start Time *
+              </label>
+              <input
+                type="datetime-local"
+                name="startTime"
+                value={examData.startTime}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                End Time *
+              </label>
+              <input
+                type="datetime-local"
+                name="endTime"
+                value={examData.endTime}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Duration (minutes) *
+              </label>
+              <input
+                type="number"
+                name="duration"
+                value={examData.duration}
+                onChange={handleInputChange}
+                min="1"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Max Attempts
+              </label>
+              <input
+                type="number"
+                name="maxAttempts"
+                value={examData.maxAttempts}
+                onChange={handleInputChange}
+                min="0"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">0 = unlimited attempts</p>
+            </div>
+          </div>
+
+          {/* Grading Configuration */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="lg:col-span-2">
+              <div className="flex items-center space-x-2 mb-4">
+                <Settings className="h-5 w-5 text-blue-600" />
+                <h3 className="text-lg font-medium text-gray-900">Grading Configuration</h3>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Passing Percentage *
+              </label>
+              <input
+                type="number"
+                name="passingPercentage"
+                value={examData.passingPercentage}
+                onChange={handleInputChange}
+                min="0"
+                max="100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            <div className="flex items-center">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center space-x-2">
+                <CheckCircle className="h-4 w-4 text-blue-600" />
+                <span className="text-sm text-blue-700">
+                  Current Total Marks: {originalExam?.totalMarks || 0}
+                </span>
+              </div>
+            </div>
+
+            <div className="lg:col-span-2">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="isNegativeMarking"
+                  name="isNegativeMarking"
+                  checked={examData.isNegativeMarking}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="isNegativeMarking" className="text-sm font-medium text-gray-700">
+                  Enable Negative Marking
+                </label>
+              </div>
+              {examData.isNegativeMarking && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Negative Marking Percentage
+                  </label>
+                  <input
+                    type="number"
+                    name="negativeMarkingPercentage"
+                    value={examData.negativeMarkingPercentage}
+                    onChange={handleInputChange}
+                    min="0"
+                    max="100"
+                    className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Percentage of marks to deduct for wrong answers
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Exam Settings */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="lg:col-span-2">
+              <div className="flex items-center space-x-2 mb-4">
+                <Settings className="h-5 w-5 text-blue-600" />
+                <h3 className="text-lg font-medium text-gray-900">Exam Settings</h3>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="isShuffleQuestions"
+                  name="isShuffleQuestions"
+                  checked={examData.isShuffleQuestions}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="isShuffleQuestions" className="text-sm font-medium text-gray-700">
+                  Shuffle Questions
+                </label>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="h-4 w-4 text-yellow-600" />
+                <span className="text-sm text-yellow-700">
+                  Status: {examData.status === 'published' ? 'Published' : 'Draft'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Instructions */}
+          <div>
+            <div className="flex items-center space-x-2 mb-4">
+              <FileText className="h-5 w-5 text-blue-600" />
+              <h3 className="text-lg font-medium text-gray-900">Exam Instructions</h3>
+            </div>
+            <div className="border border-gray-300 rounded-lg">
+              <ReactQuill
+                theme="snow"
+                value={examData.instructions}
+                onChange={handleInstructionsChange}
+                modules={quillModules}
+                formats={quillFormats}
+                placeholder="Enter exam instructions for students..."
+                style={{ height: '200px', marginBottom: '42px' }}
+              />
+            </div>
+          </div>
+
+          {/* Summary Box */}
+          <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
+            <div className="flex">
+              <Eye className="h-5 w-5 text-blue-400" />
+              <div className="ml-3">
+                <p className="text-sm text-blue-700">
+                  <strong>Exam Summary:</strong> This exam will be available from{' '}
+                  {examData.startTime ? new Date(examData.startTime).toLocaleString() : 'Not set'} to{' '}
+                  {examData.endTime ? new Date(examData.endTime).toLocaleString() : 'Not set'} with a duration of{' '}
+                  {examData.duration} minutes.
+                </p>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 };
 
 export default EditExam;

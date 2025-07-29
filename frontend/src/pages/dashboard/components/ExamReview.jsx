@@ -68,75 +68,151 @@ const ExamReview = () => {
     }
   };
     
-  useEffect(() => {
-    let socketInstance = null;
-    
-    const initializeReview = async () => {
-      setIsLoading(true);
-      try {
-        // Check if we have an attemptId from localStorage first
-        let currentAttemptId = attemptId;
-        
-        if (!currentAttemptId) {
-          // If not, get attempt details from API
-          const { data } = await axios.get(
-            `${backendUrl}/api/exams/${examId}/attempt`,
-            { withCredentials: true }
-          );
-          
-          currentAttemptId = data.attempt._id;
-          setAttemptId(currentAttemptId);
-        }
+useEffect(() => {
+  let socketInstance = null;
 
-        // Initialize WebSocket
-        socketInstance = io(backendUrl);
-        socketInstance.on('connect', () => {
-          console.log('Review page socket connected:', socketInstance.id);
-          socketInstance.emit('join-exam-room', currentAttemptId);
-        });
-        
-        socketInstance.on('timer-update', (time) => {
-          setRemainingTime(time);
-        });
-        
-        socketInstance.on('time-expired', () => {
-          console.log('Review page time expired event received');
-          handleTimeExpired();
-        });
-        
-        socketInstance.on('exam-error', (error) => {
-          console.error('Review page exam error:', error);
-          toast.error(error.message || 'An error occurred with the exam');
-          navigate('/student-dashboard/exams');
-        });
-        
-        setSocket(socketInstance);
-
-        // Load questions
-        const questionsRes = await axios.get(
-          `${backendUrl}/api/questions/${examId}/questions`,
+  const initializeReview = async () => {
+    setIsLoading(true);
+    try {
+      // Check if we have an attemptId from localStorage first
+      let currentAttemptId = attemptId;
+      
+      if (!currentAttemptId) {
+        // If not, get attempt details from API
+        const { data } = await axios.get(
+          `${backendUrl}/api/exams/${examId}/attempt`,
           { withCredentials: true }
         );
-        setQuestions(questionsRes.data.questions);
-        setIsLoading(false);
+        currentAttemptId = data.attempt._id;
+        setAttemptId(currentAttemptId);
+      }
 
-      } catch (error) {
-        console.error('Failed to load review data:', error);
-        toast.error('Failed to load review data');
+      // Initialize WebSocket
+      socketInstance = io(backendUrl);
+      
+      socketInstance.on('connect', () => {
+        console.log('Review page socket connected:', socketInstance.id);
+        socketInstance.emit('join-exam-room', currentAttemptId);
+      });
+
+      socketInstance.on('timer-update', (time) => {
+        setRemainingTime(time);
+      });
+
+      // **FIX: Define handleTimeExpired inside useEffect to avoid stale closure**
+      const handleTimeExpired = async () => {
+  console.log('=== AUTO-SUBMIT TRIGGERED ===');
+  try {
+    // 1. Get and validate data
+    const savedData = localStorage.getItem(`examAttempt-${examId}`);
+    console.log('LocalStorage data:', savedData);
+    
+    if (!savedData) {
+      console.log('No saved data found');
+      toast.info('No responses to submit.');
+      navigate('/student-dashboard/exams');
+      return;
+    }
+
+    const parsedData = JSON.parse(savedData);
+    const currentResponses = parsedData.responses || {};
+    
+    console.log('Parsed responses:', currentResponses);
+    console.log('Number of responses:', Object.keys(currentResponses).length);
+
+    // 2. Check authentication
+    await axios.get(`${backendUrl}/api/user/data`, {
+      withCredentials: true
+    });
+
+    // 3. Submit responses
+    console.log('Submitting to:', `${backendUrl}/api/responses/${examId}/batch`);
+    
+    const response = await axios.post(
+      `${backendUrl}/api/responses/${examId}/batch`,
+      { responses: currentResponses },
+      { 
+        withCredentials: true,
+        timeout: 10000 // 10 second timeout
+      }
+    );
+
+    console.log('Submission response:', response.data);
+
+    // 4. Cleanup
+    localStorage.removeItem(`examAttempt-${examId}`);
+
+    if (socketInstance) {
+      socketInstance.emit('leave-exam-room');
+      socketInstance.disconnect();
+    }
+
+    toast.success('Exam submitted successfully due to time expiry.');
+    navigate('/student-dashboard/exams');
+
+  } catch (error) {
+    console.error('=== AUTO-SUBMIT ERROR ===');
+    console.error('Error type:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Response status:', error.response?.status);
+    console.error('Response data:', error.response?.data);
+    console.error('Full error:', error);
+
+    // Specific error handling
+    let errorMessage = 'Error submitting responses automatically.';
+    
+    if (error.code === 'ECONNABORTED') {
+      errorMessage = 'Submission timeout. Please check your connection.';
+    } else if (error.response?.status === 401) {
+      errorMessage = 'Authentication failed. Please login again.';
+    } else if (error.response?.status === 404) {
+      errorMessage = 'Exam not found.';
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    }
+
+    toast.error(errorMessage);
+    navigate('/student-dashboard/exams');
+  }
+};
+
+
+      socketInstance.on('time-expired', handleTimeExpired);
+
+      socketInstance.on('exam-error', (error) => {
+        console.error('Review page exam error:', error);
+        toast.error(error.message || 'An error occurred with the exam');
         navigate('/student-dashboard/exams');
-      }
-    };
+      });
 
-    initializeReview();
+      setSocket(socketInstance);
 
-    return () => {
-      if (socketInstance) {
-        console.log('Cleaning up review page socket connection');
-        socketInstance.emit('leave-exam-room');
-        socketInstance.disconnect();
-      }
-    };
-  }, [examId, backendUrl, navigate]);
+      // Load questions
+      const questionsRes = await axios.get(
+        `${backendUrl}/api/questions/${examId}/questions`,
+        { withCredentials: true }
+      );
+      setQuestions(questionsRes.data.questions);
+
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Failed to load review data:', error);
+      toast.error('Failed to load review data');
+      navigate('/student-dashboard/exams');
+    }
+  };
+
+  initializeReview();
+
+  return () => {
+    if (socketInstance) {
+      console.log('Cleaning up review page socket connection');
+      socketInstance.emit('leave-exam-room');
+      socketInstance.disconnect();
+    }
+  };
+}, [examId, backendUrl, navigate, attemptId]);
+
 
   const handleFinalSubmit = async () => {
     try {
@@ -206,7 +282,15 @@ const ExamReview = () => {
 
       {questions.map((question, index) => (
         <div key={question._id} className="bg-white p-4 rounded shadow mb-4">
-          <h3 className="font-semibold mb-2">Q{index+1}. {question.questionText}</h3>
+          <h3 className="font-semibold mb-2">
+            <span>Q{index + 1}. </span>
+      <div 
+        className="inline"
+        dangerouslySetInnerHTML={{ 
+          __html: question.questionText || 'Question text not available' 
+        }}
+      />
+          </h3>
           <div className="space-y-2">
             {question.options.map((option, optIndex) => (
               <div 
