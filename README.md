@@ -101,6 +101,7 @@ lms-app
 │  │  ├─ resultController.js
 │  │  └─ userController.js
 │  ├─ middleware
+│  │  ├─ checkAttemptExists.js
 │  │  ├─ examMiddleware.js
 │  │  ├─ loggingMiddleware.js
 │  │  ├─ questionValidation.js
@@ -131,7 +132,9 @@ lms-app
 │  │  ├─ responseRoutes.js
 │  │  ├─ resultRoutes.js
 │  │  └─ userRoutes.js
-│  └─ server.js
+│  ├─ server.js
+│  └─ utils
+│     └─ cleanup.js
 ├─ frontend
 │  ├─ eslint.config.js
 │  ├─ index.html
@@ -149,13 +152,15 @@ lms-app
 │  │  │  └─ teacher.png
 │  │  ├─ components
 │  │  │  ├─ auth
-│  │  │  ├─ auth-backup
-│  │  │  │  ├─ AuthTabs.jsx
-│  │  │  │  ├─ LoginForm.jsx
-│  │  │  │  └─ SignUpForm.jsx
+│  │  │  │  ├─ ProtectedRoute.jsx
+│  │  │  │  └─ PublicRoute.jsx
 │  │  │  ├─ dashboard
 │  │  │  │  ├─ EmailBanner.jsx
-│  │  │  │  └─ Navbar.jsx
+│  │  │  │  ├─ ExamCard.jsx
+│  │  │  │  ├─ LoadingSkeleton.jsx
+│  │  │  │  ├─ Navbar.jsx
+│  │  │  │  ├─ Sidebar.jsx
+│  │  │  │  └─ Timer.jsx
 │  │  │  ├─ Features.tsx
 │  │  │  ├─ Footer.tsx
 │  │  │  ├─ Hero.tsx
@@ -178,8 +183,25 @@ lms-app
 │  │     │  └─ ResetPassword.jsx
 │  │     ├─ dashboard
 │  │     │  ├─ AdminDashboard.jsx
-│  │     │  ├─ StudentDashboard.jsx
-│  │     │  └─ TeacherDashboard.jsx
+│  │     │  ├─ components
+│  │     │  │  ├─ CreateExam.jsx
+│  │     │  │  ├─ DashboardHome.jsx
+│  │     │  │  ├─ EditExam.jsx
+│  │     │  │  ├─ ExamDetails.jsx
+│  │     │  │  ├─ ExamInstructionsModal.jsx
+│  │     │  │  ├─ ExamInterface.jsx
+│  │     │  │  ├─ ExamList.jsx
+│  │     │  │  ├─ ExamResults.jsx
+│  │     │  │  ├─ ExamReview.jsx
+│  │     │  │  ├─ ManageQuestions.jsx
+│  │     │  │  ├─ QuestionEditor.jsx
+│  │     │  │  ├─ RoleEditor.jsx
+│  │     │  │  ├─ SettingsPage.jsx
+│  │     │  │  ├─ UserDetails.jsx
+│  │     │  │  ├─ UserManagement.jsx
+│  │     │  │  └─ UserProfile.jsx
+│  │     │  ├─ FacultyDashboard.jsx
+│  │     │  └─ StudentDashboard.jsx
 │  │     └─ landing
 │  │        ├─ About.jsx
 │  │        ├─ ContactUs.jsx
@@ -235,3 +257,4 @@ Want to contribute? Feel free to fork the repo, create a feature branch, and sub
 For any queries or suggestions, feel free to reach out!
 - **Email**: help.cognito@gmail.com
 - **GitHub**: [Pratimsarkar02](https://github.com/Pratimsarkar02)
+

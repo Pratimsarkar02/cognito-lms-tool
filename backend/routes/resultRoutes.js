@@ -1,8 +1,10 @@
 import express from 'express';
 import {
-  generateResult,
   getStudentResult,
-  exportExamResults
+  exportExamResults,
+  getResults,
+  generateResults,
+  getAllStudentResults
 } from '../controllers/resultController.js';
 import {
   isFacultyOrAdmin
@@ -16,15 +18,24 @@ router.post(
   '/:examId/results/generate',
   userAuth,
   isFacultyOrAdmin,
-  generateResult
+  generateResults
 );
 
-// Get Results (Authenticated users)
+// Get all results for logged-in user or specified student
 router.get(
-  '/:examId/results',
+  '/all',
   userAuth,
-  getStudentResult
+  getAllStudentResults
 );
+
+// Get Results for a specific exam (Authenticated users)
+router.get(
+  '/:examId',
+  userAuth,
+  getResults
+);
+
+
 
 // Export Results (Faculty/Admin only)
 router.get(

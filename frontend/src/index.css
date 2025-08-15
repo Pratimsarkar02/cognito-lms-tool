@@ -5,3 +5,27 @@
 *{
     font-family: "Outfit", serif;
 }
+
+/* Hide sidebar and header in exam screens */
+body:has(.exam-screen) .sidebar,
+body:has(.exam-screen) .navbar {
+  display: none !important;
+}
+
+.exam-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: auto;
+  background: white;
+  z-index: 9999;
+  padding: 20px;
+}
+
+/* Disable text selection */
+.exam-screen {
+  user-select: none;
+  -webkit-user-select: none;
+}

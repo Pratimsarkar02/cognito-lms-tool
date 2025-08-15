@@ -33,11 +33,15 @@ const responseSchema = new mongoose.Schema({
       type: Number, 
       default: 0 
     },
+    originalSelectedOptions: [Number], // Store the original selected options for grading
+
     timeSpent: {
       type: Number,
       required: true
     }
   });
+// Add a compound index to ensure unique responses per exam attempt and question
+  responseSchema.index({ examAttemptId: 1, questionId: 1 }, { unique: true });
   
   const responseModel = mongoose.models['Response'] || mongoose.model('Response', responseSchema);
   

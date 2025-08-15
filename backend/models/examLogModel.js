@@ -19,7 +19,7 @@ const examLogSchema = new mongoose.Schema({
   events: [{
     type: {
       type: String,
-      enum: ['start', 'answer', 'pause', 'resume', 'complete'],
+      enum: ['start', 'answer', 'complete'],
       required: true
     },
     questionId: mongoose.Schema.Types.ObjectId,
@@ -32,6 +32,20 @@ const examLogSchema = new mongoose.Schema({
   warnings: [String],
   duration: Number // Total active duration in seconds
 }, { timestamps: true });
-  
+
+examLogSchema.pre('save', function(next) {
+  if (this.isModified('events')) {
+    const startEvent = this.events.find(e => e.type === 'start');
+    const completeEvent = this.events.find(e => e.type === 'complete');
+    
+    if (startEvent && completeEvent) {
+      this.duration = Math.round(
+        (completeEvent.timestamp - startEvent.timestamp) / 1000
+      );
+    }
+  }
+  next();
+});
+
   const examLogModel = mongoose.models['ExamLog'] || mongoose.model('ExamLog', examLogSchema);
   export default examLogModel;

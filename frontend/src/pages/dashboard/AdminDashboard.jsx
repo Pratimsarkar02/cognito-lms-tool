@@ -1,18 +1,48 @@
-import { useContext } from "react"
-import EmailVerificationBanner from "../../components/dashboard/EmailBanner"
-import Navbar from "../../components/dashboard/Navbar"
-import { AppContent } from "../../contexts/AppContext"
+import { useContext, useState } from "react";
+import { Outlet } from "react-router-dom";
+import EmailVerificationBanner from "../../components/dashboard/EmailBanner";
+import Navbar from "../../components/dashboard/Navbar";
+import Sidebar from "../../components/dashboard/Sidebar";
+import { AppContent } from "../../contexts/AppContext";
 
 const AdminDashboard = () => {
-
-  const {userData} = useContext(AppContent);
+  const { authState: { userData } } = useContext(AppContent);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    <div>
-      <Navbar userRole={userData?.role} />
+    <div className="min-h-screen bg-gray-50">
+      {/* Navbar */}
+      <Navbar userRole={userData?.role || "Admin"} />
+      
+      {/* Email Verification Banner - if needed */}
       <EmailVerificationBanner />
+      
+      {/* Main Layout */}
+      <div className="flex">
+        {/* Sidebar */}
+        <Sidebar 
+          isMobileOpen={isMobileOpen}
+          setIsMobileOpen={setIsMobileOpen}
+          isCollapsed={isCollapsed}
+          setIsCollapsed={setIsCollapsed}
+        />
+        
+        {/* Main Content Area - adjusts based on sidebar state */}
+        <main className={`transition-all duration-300 w-full ${
+          isCollapsed ? 'ml-20' : 'ml-64'
+        } p-4`}>
+            <EmailVerificationBanner />
+          {/* Dashboard content */}
+          <div className="mt-18 bg-white rounded-lg shadow-sm p-1">
+            
+            {/* For nested routes */}
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
-  )
-}
+  );
+};
 
-export default AdminDashboard
+export default AdminDashboard;

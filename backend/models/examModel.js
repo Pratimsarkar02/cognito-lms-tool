@@ -65,6 +65,10 @@ const examSchema = new mongoose.Schema({
     type: String, 
     default: '' 
   }, // HTML allowed
+  timezone: {
+    type: String,
+    default: 'Asia/Kolkata' // Default to IST
+  }
 }, { timestamps: true });
 
 const examModel = mongoose.models['Exam'] || mongoose.model('Exam', examSchema);

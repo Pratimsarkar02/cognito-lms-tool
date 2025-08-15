@@ -18,7 +18,10 @@ import { toast } from "react-toastify";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { backendUrl, setIsLoggedIn, getUserData } = useContext(AppContent);
+  const {
+    checkAuthState,
+    backendUrl 
+  } = useContext(AppContent);
 
   const location = useLocation();
   
@@ -75,7 +78,7 @@ const Login = () => {
   const getDashboardRoute = (userRole) => {
     const roleRoutes = {
       Student: "/student-dashboard",
-      Faculty: "/teacher-dashboard",
+      Faculty: "/faculty-dashboard",
       Admin: "/admin-dashboard",
     };
     return roleRoutes[userRole] || "/student-dashboard"; // fallback to student dashboard (by default)
@@ -137,26 +140,29 @@ const Login = () => {
 
   const handleLogin = async () => {
     try {
-      const { data } = await axios.post(backendUrl + "/api/auth/login", {
+      const { data } = await axios.post(`${backendUrl}/api/auth/login`, {
         email,
         password,
       });
-
+  
       if (data.success) {
-        setIsLoggedIn(true);
-        getUserData();
-        // Getting user role from response and navigating accordingly
-        const userRole = data.user.role; 
-        const dashboardRoute = getDashboardRoute(userRole);
-
-        toast.success(`Welcome to COGNITO, ${data.user.firstName}!`);
+        
+        await checkAuthState();
+        
+        // Get updated state from context
+        const dashboardRoute = getDashboardRoute(data.user.role);
         navigate(dashboardRoute);
-      } else {
+        
+        toast.success(`Welcome to COGNITO, ${data.user.firstName}!`);
+      }
+      else{
         toast.error(data.message || "Login failed");
       }
     } catch (error) {
-      const errorMessage =
-        error.response?.data?.message || error.message || "Login failed";
+      console.error("Login error:", error);
+      const errorMessage = error.response?.data?.message 
+      || error.message
+      || "Login failed due to network error";
       toast.error(errorMessage);
     }
   };

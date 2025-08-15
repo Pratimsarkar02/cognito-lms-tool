@@ -1,37 +1,62 @@
 import ExamAttempt from "../models/examAttemptModel.js";
-import Exam from "../models/examLogModel.js";
+import Exam from "../models/examModel.js"; // Fixed import - should be examModel, not examLogModel
+import ExamLog from "../models/examLogModel.js";
 
 export const checkExamTimeout = async (req, res, next) => {
   try {
     const attempt = await ExamAttempt.findOne({
       examId: req.params.examId,
       studentId: req.user.id,
-      isActive: true,
-      isCompleted: false
+      isActive: true
     });
 
-    if (!attempt) {
-      return res.status(403).json({ 
-        success: false, 
-        message: "No active exam attempt found" 
-      });
-    }
+    if (!attempt) return next();
 
-    const elapsedMinutes = (Date.now() - attempt.startTime) / (1000 * 60);
+    // Get exam details for duration
+    const exam = await Exam.findById(req.params.examId);
+    const elapsedSeconds = (Date.now() - attempt.startTime) / 1000;
+    const examDurationSeconds = exam.duration * 60;
     
-    if (elapsedMinutes > attempt.duration) {
+    // **Add grace period for auto-submit**
+    const gracePeriodSeconds = 10; // 10 seconds grace period
+    const maxAllowedTime = examDurationSeconds + gracePeriodSeconds;
+    const remainingTime = maxAllowedTime - elapsedSeconds;
+
+    // Only timeout if beyond grace period
+    if (remainingTime <= 0) {
       await ExamAttempt.findByIdAndUpdate(attempt._id, {
         isActive: false,
-        isCompleted: true
+        isCompleted: true,
+        $inc: { attemptCount: 1 }
       });
-      return res.status(403).json({ 
-        success: false, 
-        message: "Exam time expired" 
+
+      const examLog = await ExamLog.findOne({
+        examId: req.params.examId,
+        studentId: req.user.id,
+        attemptId: attempt._id
+      });
+
+      if (examLog) {
+        examLog.events.push({
+          type: 'complete',
+          timestamp: new Date(),
+          metadata: {
+            reason: 'timeout'
+          }
+        });
+        await examLog.save();
+      }
+
+      return res.status(403).json({
+        success: false,
+        message: "Exam time expired"
       });
     }
 
-    // Adding remaining time to headers
-    res.set('X-Remaining-Time', attempt.duration - elapsedMinutes);
+    // Set remaining time in header (official exam time, not including grace period)
+    const officialRemainingTime = Math.max(examDurationSeconds - elapsedSeconds, 0);
+    res.set('X-Remaining-Time', Math.floor(officialRemainingTime - 5)); // 5 second buffer for network latency
+
     next();
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

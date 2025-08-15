@@ -7,42 +7,31 @@ const analyticsSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
-  uniqueStudents: {
-    type: Number,
-    default: 0
-  },
-  totalAttempts: {
-    type: Number,
-    default: 0
-  },
+  totalStudentsAttempted: Number,
+  passPercentage: Number,
+  scoreDistribution: [{
+    range: String,
+    count: Number
+  }],
   questionStats: [{
     questionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Question'
     },
     correctAttempts: Number,
-    totalAttempts: Number,
-    averageTime: Number
+    totalAttempts: Number
   }],
   participation: {
     hourly: [{
       hour: Date,
-      activeStudents: Number
+      count: Number
     }],
     daily: [{
       date: Date,
-      attempts: Number
+      count: Number
     }]
   },
-  scores: {
-    distribution: [{
-      range: String,
-      count: Number
-    }],
-    average: Number,
-    highest: Number,
-    lowest: Number
-  }
+  lastUpdated: Date
 }, { timestamps: true });
   
   const analyticsModel = mongoose.models['Analytics'] || mongoose.model('Analytics', analyticsSchema);

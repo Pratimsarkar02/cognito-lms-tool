@@ -1,20 +1,37 @@
-import { useContext } from "react";
+import { useContext, useRef, useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { AppContent } from "../../contexts/AppContext";
 import { useNavigate } from "react-router-dom";
-import { toast } from "react-toastify";
-import axios from "axios";
 import { LogOut, Settings, User } from "lucide-react";
 
 const Navbar = ({ userRole = "user" }) => {
   const navigate = useNavigate();
-  const { userData, backendUrl, setUserData, setIsLoggedIn } = useContext(AppContent);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const { 
+    authState: { userData }, 
+    logout 
+  } = useContext(AppContent);
 
-  // Get display name based on user role
+  // Get display name from userData
   const getDisplayName = () => {
     if (!userData) return userRole;
     return userData.name || `${userData.firstName} ${userData.lastName}` || userRole;
   };
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Get role-specific navigation items
   const getRoleSpecificMenuItems = () => {
@@ -33,57 +50,56 @@ const Navbar = ({ userRole = "user" }) => {
       ]
     };
 
-
     return menuItems[userRole] || menuItems.Student;
-  };
-
-  const logout = async () => {
-    try {
-      axios.defaults.withCredentials = true;
-      const { data } = await axios.post(backendUrl + "/api/auth/logout");
-      if (data.success) {
-        setIsLoggedIn(false);
-        setUserData(false);
-        toast.success("Logged Out Successfully!");
-        navigate("/");
-      }
-    } catch (error) {
-      toast.error(error.message || "Logout failed");
-    }
   };
 
   const menuItems = getRoleSpecificMenuItems();
   const displayName = getDisplayName();
 
   return (
-    <nav className="navbar fixed top-0 w-full flex justify-between items-center p-4 bg-gray-800 text-white z-50">
-      <div className="navbar-brand">
+    <nav className="navbar fixed top-0 w-full flex justify-between items-center p-4 bg-gray-800 text-white z-40 h-16">
+      <div className="navbar-brand font-medium text-lg">
         Hey {displayName}!
       </div>
       
       <ul className="navbar-menu flex items-center list-none m-0 p-0">
-        <div className="mx-4 flex justify-center items-center text-white bg-gray-500 w-8 h-8 border-2 border-white rounded-full relative group">
-          {displayName[0]}
-          <div className="absolute hidden group-hover:block top-0 right-0 text-black rounded pt-10">
-            <ul className="rounded-md pr-10 list-none m-0 p-2 bg-gray-100 text-sm shadow-lg">
+        <div 
+          ref={dropdownRef}
+          className="mx-4 relative"
+        >
+          <button 
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="flex justify-center items-center text-white bg-gray-500 w-8 h-8 border-2 border-white rounded-full hover:bg-gray-600 transition-colors cursor-pointer"
+          >
+            {displayName[0].toUpperCase()}
+          </button>
+          
+          {dropdownOpen && (
+            <ul className="absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white text-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
               {menuItems.map((item, index) => (
                 <li
                   key={index}
-                  onClick={item.action}
-                  className="py-2 px-4 hover:bg-gray-200 cursor-pointer flex items-center gap-2"
+                  onClick={() => {
+                    item.action();
+                    setDropdownOpen(false);
+                  }}
+                  className="py-2 px-4 hover:bg-gray-100 cursor-pointer flex items-center gap-2 text-sm"
                 >
                   <item.icon className="w-4 h-4" />
                   {item.label}
                 </li>
               ))}
             </ul>
-          </div>
+          )}
         </div>
 
-        <LogOut
+        <button
           onClick={logout}
-          className="navbar-item mx-4 w-7 h-8 cursor-pointer hover:text-gray-300 transition-colors"
-        />
+          className="navbar-item mx-4 flex items-center cursor-pointer hover:text-gray-300 transition-colors"
+          aria-label="Logout"
+        >
+          <LogOut className="w-6 h-6" />
+        </button>
       </ul>
     </nav>
   );

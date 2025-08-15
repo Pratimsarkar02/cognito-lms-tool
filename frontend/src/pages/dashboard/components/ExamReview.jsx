@@ -1,0 +1,342 @@
+import { useContext, useEffect, useState, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { AppContent } from '../../../contexts/AppContext';
+import axios from 'axios';
+import { toast } from 'react-toastify';
+import { io } from 'socket.io-client';
+
+const ExamReview = () => {
+  const { examId } = useParams();
+  const navigate = useNavigate();
+  const { backendUrl } = useContext(AppContent);
+  const [questions, setQuestions] = useState([]);
+  const [remainingTime, setRemainingTime] = useState(0);
+  const [socket, setSocket] = useState(null);
+  const [attemptId, setAttemptId] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Reference for the header element
+  const headerRef = useRef(null);
+
+  // Get responses from localStorage
+  const [responses, setResponses] = useState({});
+
+  useEffect(() => {
+    // Load responses from localStorage
+    const attemptData = localStorage.getItem(`examAttempt-${examId}`);
+    if (attemptData) {
+      const parsedData = JSON.parse(attemptData);
+      setResponses(parsedData.responses || {});
+      if (parsedData.attemptId) {
+        setAttemptId(parsedData.attemptId);
+      }
+    }
+  }, [examId]);
+
+  // Separate handler for time expiration
+  const handleTimeExpired = async () => {
+    try {
+      // Get latest responses from localStorage
+      const savedData = localStorage.getItem(`examAttempt-${examId}`);
+      const currentResponses = savedData ? JSON.parse(savedData).responses : {};
+      
+      // Submit responses to backend
+      await axios.post(
+        `${backendUrl}/api/responses/${examId}/batch`,
+        { responses: currentResponses },
+        { withCredentials: true }
+      );
+      
+      // Clean up localStorage
+      localStorage.removeItem(`examAttempt-${examId}`);
+      
+      // Clean up socket
+      if (socket) {
+        socket.emit('leave-exam-room');
+        socket.disconnect();
+      }
+      
+      // Show feedback and redirect
+      toast.info('Exam time has expired. Your responses have been submitted.');
+      navigate('/student-dashboard/exams');
+    } catch (error) {
+      console.error('Auto-submission error:', error);
+      toast.error('Error submitting responses automatically. Please contact support.');
+      
+      // Even if submission fails, we should navigate away
+      navigate('/student-dashboard/exams');
+    }
+  };
+    
+useEffect(() => {
+  let socketInstance = null;
+
+  const initializeReview = async () => {
+    setIsLoading(true);
+    try {
+      // Check if we have an attemptId from localStorage first
+      let currentAttemptId = attemptId;
+      
+      if (!currentAttemptId) {
+        // If not, get attempt details from API
+        const { data } = await axios.get(
+          `${backendUrl}/api/exams/${examId}/attempt`,
+          { withCredentials: true }
+        );
+        currentAttemptId = data.attempt._id;
+        setAttemptId(currentAttemptId);
+      }
+
+      // Initialize WebSocket
+      socketInstance = io(backendUrl);
+      
+      socketInstance.on('connect', () => {
+        console.log('Review page socket connected:', socketInstance.id);
+        socketInstance.emit('join-exam-room', currentAttemptId);
+      });
+
+      socketInstance.on('timer-update', (time) => {
+        setRemainingTime(time);
+      });
+
+      // **FIX: Define handleTimeExpired inside useEffect to avoid stale closure**
+      const handleTimeExpired = async () => {
+  console.log('=== AUTO-SUBMIT TRIGGERED ===');
+  try {
+    // 1. Get and validate data
+    const savedData = localStorage.getItem(`examAttempt-${examId}`);
+    console.log('LocalStorage data:', savedData);
+    
+    if (!savedData) {
+      console.log('No saved data found');
+      toast.info('No responses to submit.');
+      navigate('/student-dashboard/exams');
+      return;
+    }
+
+    const parsedData = JSON.parse(savedData);
+    const currentResponses = parsedData.responses || {};
+    
+    console.log('Parsed responses:', currentResponses);
+    console.log('Number of responses:', Object.keys(currentResponses).length);
+
+    // 2. Check authentication
+    await axios.get(`${backendUrl}/api/user/data`, {
+      withCredentials: true
+    });
+
+    // 3. Submit responses
+    console.log('Submitting to:', `${backendUrl}/api/responses/${examId}/batch`);
+    
+    const response = await axios.post(
+      `${backendUrl}/api/responses/${examId}/batch`,
+      { responses: currentResponses },
+      { 
+        withCredentials: true,
+        timeout: 10000 // 10 second timeout
+      }
+    );
+
+    console.log('Submission response:', response.data);
+
+    // 4. Cleanup
+    localStorage.removeItem(`examAttempt-${examId}`);
+
+    if (socketInstance) {
+      socketInstance.emit('leave-exam-room');
+      socketInstance.disconnect();
+    }
+
+    toast.success('Exam submitted successfully due to time expiry.');
+    navigate('/student-dashboard/exams');
+
+  } catch (error) {
+    console.error('=== AUTO-SUBMIT ERROR ===');
+    console.error('Error type:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Response status:', error.response?.status);
+    console.error('Response data:', error.response?.data);
+    console.error('Full error:', error);
+
+    // Specific error handling
+    let errorMessage = 'Error submitting responses automatically.';
+    
+    if (error.code === 'ECONNABORTED') {
+      errorMessage = 'Submission timeout. Please check your connection.';
+    } else if (error.response?.status === 401) {
+      errorMessage = 'Authentication failed. Please login again.';
+    } else if (error.response?.status === 404) {
+      errorMessage = 'Exam not found.';
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    }
+
+    toast.error(errorMessage);
+    navigate('/student-dashboard/exams');
+  }
+};
+
+
+      socketInstance.on('time-expired', handleTimeExpired);
+
+      socketInstance.on('exam-error', (error) => {
+        console.error('Review page exam error:', error);
+        toast.error(error.message || 'An error occurred with the exam');
+        navigate('/student-dashboard/exams');
+      });
+
+      setSocket(socketInstance);
+
+      // Load questions
+      const questionsRes = await axios.get(
+        `${backendUrl}/api/questions/${examId}/questions`,
+        { withCredentials: true }
+      );
+      setQuestions(questionsRes.data.questions);
+
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Failed to load review data:', error);
+      toast.error('Failed to load review data');
+      navigate('/student-dashboard/exams');
+    }
+  };
+
+  initializeReview();
+
+  return () => {
+    if (socketInstance) {
+      console.log('Cleaning up review page socket connection');
+      socketInstance.emit('leave-exam-room');
+      socketInstance.disconnect();
+    }
+  };
+}, [examId, backendUrl, navigate, attemptId]);
+
+
+  const handleFinalSubmit = async () => {
+    try {
+      await axios.post(
+        `${backendUrl}/api/responses/${examId}/batch`,
+        { responses },
+        { withCredentials: true }
+      );
+      
+      // Clean up localStorage
+      localStorage.removeItem(`examAttempt-${examId}`);
+      
+      // Clean up socket
+      if (socket) {
+        socket.emit('leave-exam-room');
+        socket.disconnect();
+      }
+      
+      toast.success('Exam submitted successfully!');
+      navigate('/student-dashboard/exams');
+    } catch (error) {
+      toast.error('Submission failed: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleBackToExam = () => {
+    navigate(`/student-dashboard/exams/${examId}/attempt`);
+  };
+
+  const formatTime = (seconds) => {
+    if (!seconds && seconds !== 0) return "00:00:00";
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const getAnsweredCount = () => {
+    return Object.keys(responses).filter(key => responses[key]?.length > 0).length;
+  };
+
+  if (isLoading) {
+    return <div className="p-6">Loading exam review...</div>;
+  }
+
+  return (
+    <div className="p-6">
+      {/* Spacer div that takes up same height as header when header becomes fixed */}
+      <div className="mb-6"></div> 
+      
+      {/* Header with exam info and timer */}
+      <div 
+        ref={headerRef}
+        className="relative bg-gray-800 text-white p-4 rounded-lg flex justify-between items-center mb-6 z-10 px-6"
+      >
+        <div>
+          <h1 className="text-2xl font-bold">Review Your Exam</h1>
+          <p className="text-gray-300">
+            {getAnsweredCount()} of {questions.length} questions answered
+          </p>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl">{formatTime(remainingTime)}</div>
+          <div className="text-sm">Hrs | Min | Sec</div>
+        </div>
+      </div>
+
+      {questions.map((question, index) => (
+        <div key={question._id} className="bg-white p-4 rounded shadow mb-4">
+          <h3 className="font-semibold mb-2">
+            <span>Q{index + 1}. </span>
+      <div 
+        className="inline"
+        dangerouslySetInnerHTML={{ 
+          __html: question.questionText || 'Question text not available' 
+        }}
+      />
+          </h3>
+          <div className="space-y-2">
+            {question.options.map((option, optIndex) => (
+              <div 
+                key={optIndex}
+                className={`p-2 rounded ${
+                  responses[question._id]?.includes(optIndex) 
+                    ? 'bg-blue-50 border border-blue-200' 
+                    : 'bg-gray-50'
+                }`}
+              >
+                <label className="flex items-center gap-2">
+                  <input
+                    type={question.questionType === 'msq' ? 'checkbox' : 'radio'}
+                    checked={responses[question._id]?.includes(optIndex)}
+                    disabled
+                    className="w-4 h-4"
+                  />
+                  <span>{option.text}</span>
+                </label>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 text-sm text-gray-500">
+            {!responses[question._id] || responses[question._id].length === 0 
+              ? <span className="text-red-500">Not answered</span> 
+              : <span className="text-green-500">Answered</span>}
+          </div>
+        </div>
+      ))}
+
+      <div className="flex gap-4 justify-end mt-6">
+        <button
+          onClick={handleBackToExam}
+          className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded cursor-pointer"
+        >
+          Back to Exam
+        </button>
+        <button
+          onClick={handleFinalSubmit}
+          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded cursor-pointer"
+        >
+          Final Submit
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default ExamReview;

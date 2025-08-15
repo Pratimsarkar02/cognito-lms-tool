@@ -4,74 +4,55 @@ import Response from '../models/responseModel.js';
 import ExamAttempt from '../models/examAttemptModel.js';
 import { Parser } from 'json2csv';
 
-export const generateResult = async (req, res) => {
+export const generateResults = async (req, res) => {
   try {
     const { examId } = req.params;
+    const exam = await Exam.findById(examId).lean(); // Critical fix
 
-    const exam = await Exam.findById(examId);
-    if (!exam) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Exam not found" 
-      });
-    }
-    if(!exam.totalMarks){
-      return res.status(400).json({ 
-        success: false, 
-        message: "Exam has no questions or total marks are not calculated"
-      });
-    }
+    // Get all students who attempted
+    const studentIds = await ExamAttempt.find({ examId })
+      .distinct('studentId');
 
-    // Getting all completed attempts for this exam
-    const attempts = await ExamAttempt.find({ 
-      examId,
-      isCompleted: true 
-    });
+    const results = await Promise.all(
+      studentIds.map(async (studentId) => {
+        const result = await Result.findOne({ examId, studentId })
+          .populate('allAttempts.attemptId');
 
-    // Processing each attempt individually
-    const bulkOps = await Promise.all(attempts.map(async (attempt) => {
-      const responses = await Response.find({ examAttemptId: attempt._id });
-      
-      const totalMarks = responses.reduce(
-        (sum, response) => sum + response.marksObtained,
-        0
-      );
+        if (!result?.allAttempts?.length) return null;
 
-      const percentage = (totalMarks / exam.totalMarks) * 100;
-      const isPassed = percentage >= exam.passingPercentage;
-
-      return {
-        updateOne: {
-          filter: { 
-            examId: attempt.examId,
-            studentId: attempt.studentId,
-            attemptId: attempt._id 
-          },
-          update: {
-            $set: {
-              totalMarks: exam.totalMarks,
-              marksObtained: totalMarks,
-              attemptId: attempt._id,
-              percentage,
-              isPassed
-            }
-          },
-          upsert: true
+        // Find best attempt
+        let bestAttempt = result.allAttempts[0];
+        for (const attempt of result.allAttempts) {
+          if (attempt.percentage > bestAttempt.percentage) {
+            bestAttempt = attempt;
+          }
         }
-      };
-    }));
 
-    await Result.bulkWrite(bulkOps);
+        // Update with best attempt data
+        return Result.findByIdAndUpdate(
+          result._id,
+          {
+            marksObtained: bestAttempt.marksObtained,
+            percentage: bestAttempt.percentage,
+            isPassed: bestAttempt.percentage >= exam.passingPercentage,
+            bestAttemptId: bestAttempt.attemptId,
+            totalMarks: exam.totalMarks
+          },
+          { new: true }
+        );
+      })
+    );
 
-    res.status(200).json({ 
-      success: true, 
-      message: "Results generated successfully" 
+    res.status(200).json({
+      success: true,
+      message: `${results.length} results generated`,
+      results: results.filter(r => r !== null)
     });
 
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      message: error.message 
+    res.status(500).json({
+      success: false,
+      message: error.message
     });
   }
 };
@@ -110,14 +91,18 @@ export const exportExamResults = async (req, res) => {
     const { examId } = req.params;
     
     const results = await Result.find({ examId })
-      .populate('studentId', 'firstName lastName email')
-      .lean();
+    .populate('studentId', 'firstName lastName email')
+    .populate('examId', 'title totalMarks')
+    .lean();
 
     const csvFields = [
       { label: 'Student Name', value: row => `${row.studentId.firstName} ${row.studentId.lastName}` },
       { label: 'Email', value: 'studentId.email' },
+      { label: 'Exam Title', value: 'examId.title' },
+      { label: 'Total Marks', value: 'totalMarks' },
       { label: 'Marks Obtained', value: 'marksObtained' },
-      { label: 'Percentage', value: 'percentage' }
+      { label: 'Percentage', value: row => `${row.percentage.toFixed(2)}%` },
+      { label: 'Is Passed', value: row => (row.isPassed ? 'Yes' : 'No') }
     ];
 
     const csvParser = new Parser({ fields: csvFields });
@@ -131,6 +116,107 @@ export const exportExamResults = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: error.message 
+    });
+  }
+};
+
+export const getResults = async (req, res) => {
+  try {
+    const results = await Result.find({ examId: req.params.examId })
+      .populate({
+        path: 'studentId',
+        select: 'firstName lastName email',
+        model: 'user-details'
+      })
+      .populate({
+        path: 'bestAttemptId',
+        select: 'startTime endTime',
+        model: 'ExamAttempt'
+      });
+
+    // Validate results
+    const validatedResults = results.map(result => ({
+      ...result.toObject(),
+      percentage: Number(result.percentage.toFixed(2)),
+      isPassed: result.percentage >= 40 // Ensure passing criteria match
+    }));
+
+    res.status(200).json({
+      success: true,
+      results: validatedResults
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Add this function to your resultController.js file
+
+export const getAllStudentResults = async (req, res) => {
+  try {
+    const studentId = req.user.role === 'Student' ? req.user.id : req.query.studentId;
+    const isAdmin = req.user.role === 'Admin';
+    const isFaculty = req.user.role === 'Faculty';
+
+    let query = {};
+    
+    // For students, only show their own results
+    if (!isAdmin && !isFaculty) {
+      query.studentId = studentId;
+    } 
+    // For admin/faculty with a specific student requested
+    else if (req.query.studentId) {
+      query.studentId = req.query.studentId;
+    }
+    // For admin/faculty without specific student (show all if the all parameter is true)
+    else if (req.query.all === 'true') {
+      // Query remains empty to get all results
+    } else {
+      // Default to their associated exams if no parameter is provided
+      // This could be modified based on your business logic
+      query.createdBy = req.user.id;
+    }
+
+    const results = await Result.find(query)
+      .populate({
+        path: 'examId',
+        select: 'title totalMarks passingPercentage',
+      })
+      .populate({
+        path: 'studentId',
+        select: 'firstName lastName email',
+        model: 'user-details'
+      })
+      .populate({
+        path: 'bestAttemptId',
+        select: 'startTime endTime',
+        model: 'ExamAttempt'
+      });
+
+    // Validate results
+    const validatedResults = results.map(result => {
+      if (!result) return null;
+      
+      return {
+        ...result.toObject(),
+        percentage: Number((result.percentage || 0).toFixed(2)),
+        isPassed: (result.percentage || 0) >= (result.examId?.passingPercentage || 40)
+      };
+    }).filter(result => result !== null);
+
+    res.status(200).json({
+      success: true,
+      results: validatedResults
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
     });
   }
 };
