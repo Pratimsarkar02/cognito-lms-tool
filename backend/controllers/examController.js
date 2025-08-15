@@ -6,9 +6,48 @@ import Result from '../models/resultModel.js';
 import ExamLog from '../models/examLogModel.js';
 import Analytics from '../models/analyticsModel.js';
 
+// FIXED: Helper function to get current IST time
+const getCurrentIST = () => {
+  const now = new Date();
+  const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+  return istTime;
+};
+
+// FIXED: Helper function to convert UTC to IST for filtering
+const convertUTCToIST = (utcDate) => {
+  if (!utcDate) return null;
+  const istDate = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
+  return istDate;
+};
+
+// Helper function for pagination logic
+const getPaginationParams = (req) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const sortBy = req.query.sortBy || '-createdAt';
+  const searchQuery = req.query.search || '';
+  const skip = (page - 1) * limit;
+  
+  return { page, limit, sortBy, searchQuery, skip };
+};
+
+// Helper function to build search filter
+const buildSearchFilter = (searchQuery, baseFilter = {}) => {
+  const filter = { ...baseFilter };
+  
+  if (searchQuery) {
+    filter.title = {
+      $regex: searchQuery,
+      $options: 'i' // Case-insensitive
+    };
+  }
+  
+  return filter;
+};
+
 export const createExam = async (req, res) => {
   try {
-    const { title, description, startTime, endTime, duration, maxAttempts, isShuffleQuestions, isNegativeMarking, negativeMarkingPercentage, instructions } = req.body;
+    const { title, description, startTime, endTime, duration, maxAttempts, isShuffleQuestions, isNegativeMarking, negativeMarkingPercentage, instructions, timezone } = req.body;
 
     if (!title || !startTime || !endTime || !duration) {
       return res.status(400).json({ 
@@ -16,12 +55,17 @@ export const createExam = async (req, res) => {
         message: "Title, start time, end time, and duration are required" 
       });
     }
-    if (new Date(startTime) < Date.now()) {
+    // FIXED: Proper timezone validation
+    const startTimeUTC = new Date(startTime);
+    const endTimeUTC = new Date(endTime);
+    const currentTimeUTC = new Date();
+
+    if (startTimeUTC < currentTimeUTC) {
       return res.status(400).json({ 
         success: false, 
         message: "Start time must be in the future" 
       });
-    }else if (new Date(endTime) < new Date(startTime)) {
+    }else if (endTimeUTC <= startTimeUTC) {
       return res.status(400).json({
         success: false,
         message: "End time must be after start time"
@@ -35,14 +79,15 @@ export const createExam = async (req, res) => {
     const newExam = new Exam({
       title,
       description,
-      startTime: new Date(startTime),
-      endTime: new Date(endTime),
+      startTime: startTimeUTC,
+      endTime: endTimeUTC,
       duration,
       maxAttempts,
       isShuffleQuestions, 
       isNegativeMarking, 
       negativeMarkingPercentage,
-      instructions,      
+      instructions,
+      timezone: timezone || 'Asia/Kolkata', // Default to IST if not provided
       createdBy: req.user.id
     });
 
@@ -64,9 +109,20 @@ export const createExam = async (req, res) => {
 
 export const updateExam = async (req, res) => {
   try {
+    
+    const updates = { ...req.body };
+    
+    // If startTime or endTime is provided, ensure they're properly handled
+    if (updates.startTime) {
+      updates.startTime = new Date(updates.startTime);
+    }
+    if (updates.endTime) {
+      updates.endTime = new Date(updates.endTime);
+    }
+
     const exam = await Exam.findByIdAndUpdate(
       req.params.examId,
-      req.body,
+      updates,
       { new: true, runValidators: true }
     );
 
@@ -160,63 +216,50 @@ export const toggleExamStatus = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// FIXED: List Active Exams with proper pagination (Student)
 export const listActiveExams = async (req, res) => {
-    try {
-      // Getting query parameters with defaults
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const sortBy = req.query.sortBy || '-createdAt'; // Default: newest first
-      const searchQuery = req.query.search || '';
-  
-      // Calculating pagination skip value
-      const skip = (page - 1) * limit;
-  
-      // Base query for active exams
-      const baseQuery = {
-        status: 'published',
-        startTime: { $lte: new Date() },
-        endTime: { $gte: new Date() }
-      };
-  
-      // Adding search filter if provided
-      if (searchQuery) {
-        baseQuery.title = { 
-          $regex: searchQuery, 
-          $options: 'i' // Case-insensitive
-        };
+  try {
+    const { page, limit, sortBy, searchQuery, skip } = getPaginationParams(req);
+
+    const currentTimeUTC = new Date();
+
+    // Base query for active exams - comparing UTC times
+    const baseQuery = {
+      status: 'published',
+      startTime: { $lte: currentTimeUTC },
+      endTime: { $gt: currentTimeUTC }  // Changed to $gt instead of $gte
+    };
+
+    const filter = buildSearchFilter(searchQuery, baseQuery);
+
+    // Get paginated results and total count
+    const [exams, total] = await Promise.all([
+      Exam.find(filter)
+        .sort(sortBy)
+        .skip(skip)
+        .limit(limit)
+        .select('-__v')
+        .lean(),
+      Exam.countDocuments(filter)
+    ]);
+
+    res.status(200).json({
+      success: true,
+      exams,
+      pagination: {
+        currentPage: page,
+        itemsPerPage: limit,
+        totalItems: total,
+        totalPages: Math.ceil(total / limit)
       }
-  
-      // Getting paginated results and total count
-      const [exams, total] = await Promise.all([
-        // Getting exams with sorting and pagination
-        Exam.find(baseQuery)
-          .sort(sortBy)
-          .skip(skip)
-          .limit(limit)
-          .select('-createdBy -__v')
-          .lean(),
-  
-        // Get total matching exams count
-        Exam.countDocuments(baseQuery)
-      ]);
-  
-      res.status(200).json({
-        success: true,
-        exams,
-        pagination: {
-          currentPage: page,
-          itemsPerPage: limit,
-          totalItems: total,
-          totalPages: Math.ceil(total / limit)
-        }
-      });
-  
-    } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        message: error.message 
-      });
-    }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };
 
 export const deleteExam = async (req, res) => {
@@ -409,21 +452,88 @@ export const completeExamAttempt = async (req, res) => {
   }
 };
 
-// Add this to handle /my-exams route
+// FIXED: Get My Exams with pagination (Faculty)
 export const getMyExams = async (req, res) => {
   try {
-    const exams = await Exam.find({ createdBy: req.user.id })
-      .sort('-createdAt')
-      .lean();
+    const { page, limit, sortBy, searchQuery, skip } = getPaginationParams(req);
 
-    res.status(200).json({ 
+    const baseQuery = { 
+      $or: [
+        { createdBy: req.user.id },
+        { creatorId: req.user.id }
+      ]
+    };
+
+    const filter = buildSearchFilter(searchQuery, baseQuery);
+
+    const [exams, total] = await Promise.all([
+      Exam.find(filter)
+        .sort(sortBy)
+        .skip(skip)
+        .limit(limit)
+        .select('-__v')
+        .lean(),
+      Exam.countDocuments(filter)
+    ]);
+
+    res.status(200).json({
       success: true,
-      exams 
+      exams,
+      pagination: {
+        currentPage: page,
+        itemsPerPage: limit,
+        totalItems: total,
+        totalPages: Math.ceil(total / limit)
+      }
     });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      message: error.message 
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// FIXED: Get All Exams with pagination (Admin)
+export const getAllExams = async (req, res) => {
+  try {
+    const { page, limit, sortBy, searchQuery, skip } = getPaginationParams(req);
+
+    const filter = buildSearchFilter(searchQuery);
+
+    const [exams, total] = await Promise.all([
+      Exam.find(filter)
+        .populate('createdBy', 'firstName lastName')
+        .sort(sortBy)
+        .skip(skip)
+        .limit(limit)
+        .select('-__v')
+        .lean(),
+      Exam.countDocuments(filter)
+    ]);
+
+    // Process exams to ensure consistent creator info
+    const processedExams = exams.map(exam => {
+      if (exam.createdBy && !exam.creatorId) {
+        exam.creatorId = typeof exam.createdBy === 'object' ? exam.createdBy._id : exam.createdBy;
+      }
+      return exam;
+    });
+
+    res.status(200).json({
+      success: true,
+      exams: processedExams,
+      pagination: {
+        currentPage: page,
+        itemsPerPage: limit,
+        totalItems: total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
     });
   }
 };

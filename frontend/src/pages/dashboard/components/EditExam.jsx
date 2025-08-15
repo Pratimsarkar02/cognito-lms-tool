@@ -40,6 +40,32 @@ const EditExam = () => {
     instructions: '',
     status: 'draft'
   });
+const [originalFormattedData, setOriginalFormattedData] = useState(null);
+
+// FIXED: Enhanced datetime formatting with timezone handling
+const formatDateTimeForInput = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  // Use proper local timezone offset for consistent formatting
+  const offset = d.getTimezoneOffset() * 60000;
+  const localTime = new Date(d.getTime() - offset);
+  return localTime.toISOString().slice(0, 16);
+};
+
+const convertUTCToIST = (utcDateTime) => {
+  if (!utcDateTime) return '';
+  const utcDate = new Date(utcDateTime);
+  // JavaScript automatically converts to local timezone for datetime-local
+  const offset = utcDate.getTimezoneOffset() * 60000;
+  const localTime = new Date(utcDate.getTime() - offset);
+  return localTime.toISOString().slice(0, 16);
+};
+
+const convertISTToUTC = (istDateTime) => {
+  if (!istDateTime) return null;
+  const localDate = new Date(istDateTime);
+  return localDate.toISOString();
+};
 
   // React Quill configuration
   const quillModules = {
@@ -72,18 +98,15 @@ const EditExam = () => {
         const exam = data.exam;
         setOriginalExam(exam);
         
-        // Format dates for datetime-local input
-        const formatDateTimeForInput = (date) => {
-          if (!date) return '';
-          const d = new Date(date);
-          return d.toISOString().slice(0, 16);
-        };
+        // FIXED: Format dates consistently and store the formatted values
+      const formattedStartTime = formatDateTimeForInput(exam.startTime);
+      const formattedEndTime = formatDateTimeForInput(exam.endTime);
         
-        setExamData({
+        const formattedExamData = {
           title: exam.title || '',
           description: exam.description || '',
-          startTime: formatDateTimeForInput(exam.startTime),
-          endTime: formatDateTimeForInput(exam.endTime),
+          startTime: formattedStartTime,
+          endTime: formattedEndTime,
           duration: exam.duration || 60,
           maxAttempts: exam.maxAttempts || 1,
           isShuffleQuestions: exam.isShuffleQuestions ?? true,
@@ -92,8 +115,13 @@ const EditExam = () => {
           passingPercentage: exam.passingPercentage || 40,
           instructions: exam.instructions || '',
           status: exam.status || 'draft'
-        });
+        };
         
+      setExamData(formattedExamData);
+      
+      // FIXED: Store the original formatted data for comparison
+      setOriginalFormattedData(formattedExamData);
+      
       } catch (error) {
         console.error('Error loading exam:', error);
         toast.error('Failed to load exam details');
@@ -190,8 +218,8 @@ const EditExam = () => {
       const payload = {
         title: examData.title.trim(),
         description: examData.description,
-        startTime: examData.startTime,
-        endTime: examData.endTime,
+        startTime: convertISTToUTC(examData.startTime),
+        endTime: convertISTToUTC(examData.endTime),
         duration: parseInt(examData.duration),
         maxAttempts: parseInt(examData.maxAttempts),
         isShuffleQuestions: examData.isShuffleQuestions,
@@ -231,20 +259,20 @@ const EditExam = () => {
 
   // Check if exam has been modified
   const hasChanges = () => {
-    if (!originalExam) return false;
+    if (!originalFormattedData) return false;
     
     return (
-      examData.title !== (originalExam.title || '') ||
-      examData.description !== (originalExam.description || '') ||
-      examData.startTime !== new Date(originalExam.startTime).toISOString().slice(0, 16) ||
-      examData.endTime !== new Date(originalExam.endTime).toISOString().slice(0, 16) ||
-      examData.duration !== originalExam.duration ||
-      examData.maxAttempts !== originalExam.maxAttempts ||
-      examData.isShuffleQuestions !== originalExam.isShuffleQuestions ||
-      examData.isNegativeMarking !== originalExam.isNegativeMarking ||
-      examData.negativeMarkingPercentage !== originalExam.negativeMarkingPercentage ||
-      examData.passingPercentage !== originalExam.passingPercentage ||
-      examData.instructions !== (originalExam.instructions || '')
+      examData.title !== (originalFormattedData.title || '') ||
+      examData.description !== (originalFormattedData.description || '') ||
+      examData.startTime !== convertUTCToIST(originalFormattedData.startTime) ||
+      examData.endTime !== convertUTCToIST(originalFormattedData.endTime) ||
+      examData.duration !== originalFormattedData.duration ||
+      examData.maxAttempts !== originalFormattedData.maxAttempts ||
+      examData.isShuffleQuestions !== originalFormattedData.isShuffleQuestions ||
+      examData.isNegativeMarking !== originalFormattedData.isNegativeMarking ||
+      examData.negativeMarkingPercentage !== originalFormattedData.negativeMarkingPercentage ||
+      examData.passingPercentage !== originalFormattedData.passingPercentage ||
+      examData.instructions !== (originalFormattedData.instructions || '')
     );
   };
 
@@ -567,8 +595,8 @@ const EditExam = () => {
               <div className="ml-3">
                 <p className="text-sm text-blue-700">
                   <strong>Exam Summary:</strong> This exam will be available from{' '}
-                  {examData.startTime ? new Date(examData.startTime).toLocaleString() : 'Not set'} to{' '}
-                  {examData.endTime ? new Date(examData.endTime).toLocaleString() : 'Not set'} with a duration of{' '}
+                  {examData.startTime ? new Date(examData.startTime).toLocaleString('en-GB') : 'Not set'} to{' '}
+                  {examData.endTime ? new Date(examData.endTime).toLocaleString('en-GB') : 'Not set'} with a duration of{' '}
                   {examData.duration} minutes.
                 </p>
               </div>

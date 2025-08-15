@@ -7,7 +7,9 @@ import {
   deleteExam,
   startExamAttempt,
   unpublishExam,
-  toggleExamStatus
+  toggleExamStatus,
+  getMyExams,
+  getAllExams
 } from '../controllers/examController.js';
 import {
   isFacultyOrAdmin,
@@ -41,55 +43,18 @@ router.get('/active',
   listActiveExams // Controller handles filtering
 );
 
-// Fetch exam details based on creator
+// FIXED: Fetch exam details for faculty
 router.get('/my-exams',
   userAuth,
   isFacultyOrAdmin,
-  async (req, res) => {
-    try {
-      // Make sure we're using the right field name - updating from createdBy to creatorId if needed
-      const exams = await Exam.find({ 
-        $or: [
-          { createdBy: req.user.id },
-          { creatorId: req.user.id }
-        ]
-      });
-      res.json({ exams });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
+  getMyExams  // Use the updated function
 );
 
-// Fetch all exams (Admin only)
+// FIXED: Fetch all exams (Admin only)
 router.get('/all',
   userAuth,
   isFacultyOrAdmin,
-  async (req, res) => {
-    try {
-      // Add both possible field names to the populate to ensure we get creator data
-      const exams = await Exam.find()
-        .populate('createdBy', 'firstName lastName')
-        .lean();
-        
-      // Make sure each exam has creatorId set for frontend consistency
-      const processedExams = exams.map(exam => {
-        // If exam has createdBy but no creatorId, set creatorId
-        if (exam.createdBy && !exam.creatorId) {
-          if (typeof exam.createdBy === 'object') {
-            exam.creatorId = exam.createdBy._id;
-          } else {
-            exam.creatorId = exam.createdBy;
-          }
-        }
-        return exam;
-      });
-      
-      res.json({ exams: processedExams });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
+  getAllExams  // Use the new function
 );
 
 router.get('/attempted', userAuth,

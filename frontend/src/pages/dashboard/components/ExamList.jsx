@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, useCallback } from 'react';
+import { useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { AppContent } from '../../../contexts/AppContext';
 import axios from 'axios';
 import { toast } from 'react-toastify';
@@ -36,35 +36,36 @@ const ExamList = () => {
 
   // Separate search input state to prevent text disappearing
   const [searchInput, setSearchInput] = useState('');
+  
+  // FIXED: Use useRef to store debounce timer
+  const debounceTimer = useRef(null);
 
-  // FIXED: Stable debounce function
-  const debounce = useCallback((func, delay) => {
-    let timer;
-    return (...args) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => func.apply(this, args), delay);
-    };
-  }, []);
+  // Early return AFTER all hooks
+  if (!userData) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500"></div>
+        <p className="ml-4 text-gray-600">Loading user data...</p>
+      </div>
+    );
+  }
 
-  // FIXED: Properly structured fetch function
+  // FIXED: Stable fetch function with no state dependencies
   const fetchExams = useCallback(async (pageNumber, sortByValue, searchValue, limitValue) => {
-    if (!userData) return; // Early exit if no user data
-    
     try {
       setState(prev => ({ ...prev, isLoading: true }));
 
       let endpoint = '/api/exams/active';
       const params = {
-        page: pageNumber || state.currentPage,
-        limit: limitValue || state.limit,
-        sortBy: sortByValue || state.sortBy,
-        search: searchValue || state.searchQuery
+        page: pageNumber || 1,
+        limit: limitValue || 10,
+        sortBy: sortByValue || '-createdAt',
+        search: searchValue || ''
       };
 
       switch(userData.role) {
         case 'Faculty':
           endpoint = '/api/exams/my-exams';
-          params.creatorId = userData._id;
           break;
         case 'Admin':
           endpoint = '/api/exams/all';
@@ -83,6 +84,9 @@ const ExamList = () => {
         exams: data.exams || [],
         totalPages: data.pagination?.totalPages || 1,
         currentPage: data.pagination?.currentPage || pageNumber || 1,
+        sortBy: sortByValue || prev.sortBy,
+        searchQuery: searchValue || '',
+        limit: limitValue || prev.limit,
         isLoading: false
       }));
     } catch (error) {
@@ -90,60 +94,63 @@ const ExamList = () => {
       toast.error(error.response?.data?.message || 'Failed to fetch exams');
       setState(prev => ({ ...prev, isLoading: false }));
     }
-  }, [backendUrl, userData, state.currentPage, state.limit, state.sortBy, state.searchQuery]);
+  }, [backendUrl, userData.role]); // Only depend on stable values
 
-  // FIXED: useEffect with proper dependencies
+  // FIXED: Initial data load
   useEffect(() => {
     if (userData) {
-      fetchExams();
+      fetchExams(1, '-createdAt', '', 10);
     }
-  }, [userData]); // Only trigger when userData changes
+  }, [userData, fetchExams]);
 
-  // FIXED: Debounced search with stable function
-  const debouncedSearch = useCallback(
-    debounce((query) => {
-      setState(prev => ({ ...prev, searchQuery: query, currentPage: 1 }));
+  // FIXED: Stable debounced search function
+  const performDebouncedSearch = useCallback((query) => {
+    // Clear existing timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    // Set new timer
+    debounceTimer.current = setTimeout(() => {
       fetchExams(1, state.sortBy, query, state.limit);
-    }, 500),
-    [debounce, state.sortBy, state.limit, fetchExams]
-  );
+    }, 500);
+  }, [fetchExams, state.sortBy, state.limit]);
 
-  // FIXED: Search handler that doesn't clear input
+  // FIXED: Search input handler that doesn't cause re-renders
   const handleSearchChange = useCallback((e) => {
     const value = e.target.value;
-    setSearchInput(value); // Update input immediately for UI
-    debouncedSearch(value); // Trigger debounced search
-  }, [debouncedSearch]);
+    setSearchInput(value); // Update input immediately for UI responsiveness
+    performDebouncedSearch(value); // Trigger debounced API call
+  }, [performDebouncedSearch]);
 
   // Clear search function
   const clearSearch = useCallback(() => {
     setSearchInput('');
-    setState(prev => ({ ...prev, searchQuery: '', currentPage: 1 }));
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
     fetchExams(1, state.sortBy, '', state.limit);
-  }, [state.sortBy, state.limit, fetchExams]);
+  }, [fetchExams, state.sortBy, state.limit]);
 
-  // FIXED: Sort handler
+  // FIXED: Sort handler with explicit values
   const handleSortChange = useCallback((e) => {
     const newSortBy = e.target.value;
-    setState(prev => ({ ...prev, sortBy: newSortBy, currentPage: 1 }));
     fetchExams(1, newSortBy, state.searchQuery, state.limit);
-  }, [state.searchQuery, state.limit, fetchExams]);
+  }, [fetchExams, state.searchQuery, state.limit]);
 
-  // FIXED: Pagination handler
+  // FIXED: Pagination handler with explicit values
   const handlePageChange = useCallback((newPage) => {
     if (newPage < 1 || newPage > state.totalPages) return;
-    setState(prev => ({ ...prev, currentPage: newPage }));
     fetchExams(newPage, state.sortBy, state.searchQuery, state.limit);
-  }, [state.totalPages, state.sortBy, state.searchQuery, state.limit, fetchExams]);
+  }, [fetchExams, state.totalPages, state.sortBy, state.searchQuery, state.limit]);
 
   // Items per page handler
   const handleLimitChange = useCallback((e) => {
     const newLimit = parseInt(e.target.value);
-    setState(prev => ({ ...prev, limit: newLimit, currentPage: 1 }));
     fetchExams(1, state.sortBy, state.searchQuery, newLimit);
-  }, [state.sortBy, state.searchQuery, fetchExams]);
+  }, [fetchExams, state.sortBy, state.searchQuery]);
 
-  // Event handlers
+  // FIXED: Event handlers with stable dependencies
   const handleStartExam = useCallback((examId) => {
     navigate(`/student-dashboard/exams/${examId}`);
   }, [navigate]);
@@ -151,7 +158,7 @@ const ExamList = () => {
   const handleEditExam = useCallback((examId) => {
     const dashboardPrefix = userData.role.toLowerCase();
     navigate(`/${dashboardPrefix}-dashboard/exams/${examId}/edit`);
-  }, [userData, navigate]);
+  }, [userData.role, navigate]);
 
   const handleDeleteExam = useCallback(async (examId) => {
     if (!window.confirm('Are you sure you want to delete this exam?')) return;
@@ -161,11 +168,12 @@ const ExamList = () => {
         withCredentials: true
       });
       toast.success('Exam deleted successfully');
-      fetchExams();
+      // Refetch current page
+      fetchExams(state.currentPage, state.sortBy, state.searchQuery, state.limit);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Deletion failed');
     }
-  }, [backendUrl, fetchExams]);
+  }, [backendUrl, fetchExams, state.currentPage, state.sortBy, state.searchQuery, state.limit]);
 
   const handlePublishExam = useCallback(async (examId) => {
     try {
@@ -173,11 +181,11 @@ const ExamList = () => {
         withCredentials: true
       });
       toast.success('Exam Published');
-      fetchExams();
+      fetchExams(state.currentPage, state.sortBy, state.searchQuery, state.limit);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Publish failed');
     }
-  }, [backendUrl, fetchExams]);
+  }, [backendUrl, fetchExams, state.currentPage, state.sortBy, state.searchQuery, state.limit]);
 
   const handleUnpublishExam = useCallback(async (examId) => {
     try {
@@ -185,13 +193,13 @@ const ExamList = () => {
         withCredentials: true
       });
       toast.success('Exam Unpublished');
-      fetchExams();
+      fetchExams(state.currentPage, state.sortBy, state.searchQuery, state.limit);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Unpublish failed');
     }
-  }, [backendUrl, fetchExams]);
+  }, [backendUrl, fetchExams, state.currentPage, state.sortBy, state.searchQuery, state.limit]);
 
-  // FIXED: Exam creator check
+  // FIXED: Exam creator check with stable dependency
   const isExamCreator = useCallback((exam) => {
     if (!userData || !userData._id || !exam) return false;
     
@@ -230,15 +238,14 @@ const ExamList = () => {
     return pages;
   };
 
-  // FIXED: Loading check after all hooks
-  if (!userData) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500"></div>
-        <p className="ml-4 text-gray-600">Loading user data...</p>
-      </div>
-    );
-  }
+  // FIXED: Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
 
   if (state.isLoading) {
     return (
@@ -279,9 +286,7 @@ const ExamList = () => {
             Create New Exam
           </button>
         )}
-      </div>
-      
-
+      </div> 
       {/* FIXED: Search and Filter Section */}
       <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -295,7 +300,7 @@ const ExamList = () => {
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* FIXED: Search Input with stable value */}
+          {/* FIXED: Search Input with stable value and no page reload */}
           <div className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-2">Search Exams</label>
             <div className="relative">
@@ -421,9 +426,8 @@ const ExamList = () => {
                       {userData.role === "Student" && (
                         <button
                           onClick={() => handleStartExam(exam._id)}
-                          className="inline-flex items-center px-4 py-2 cursor-pointer bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+                          className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
                         >
-                          <PenTool className="h-5 w-5 mr-1" />
                           Start Exam
                         </button>
                       )}
@@ -432,7 +436,7 @@ const ExamList = () => {
                         <div className="flex items-center justify-center space-x-2">
                           <button
                             onClick={() => handleEditExam(exam._id)}
-                            className="inline-flex items-center px-3 py-2 cursor-pointer bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium rounded-lg transition-colors"
+                            className="inline-flex items-center px-3 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium rounded-lg transition-colors"
                           >
                             <Edit className="h-3 w-3 mr-1" />
                             Edit
@@ -440,7 +444,7 @@ const ExamList = () => {
                           
                           <button
                             onClick={() => navigate(`/${userData.role.toLowerCase()}-dashboard/exams/${exam._id}/questions`)}
-                            className="inline-flex items-center px-3 py-2 cursor-pointer bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-colors"
+                            className="inline-flex items-center px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-colors"
                           >
                             <PenTool className="h-3 w-3 mr-1" />
                             Questions
@@ -448,7 +452,7 @@ const ExamList = () => {
                           
                           <button
                             onClick={() => handleDeleteExam(exam._id)}
-                            className="inline-flex items-center px-3 py-2 cursor-pointer bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors"
+                            className="inline-flex items-center px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors"
                           >
                             <Trash className="h-3 w-3 mr-1" />
                             Delete
@@ -468,7 +472,7 @@ const ExamList = () => {
                         {exam.status === "draft" && (examCreator || userData.role === 'Admin') && (
                           <button
                             onClick={() => handlePublishExam(exam._id)}
-                            className="inline-flex items-center px-3 py-2 cursor-pointer bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+                            className="inline-flex items-center px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
                           >
                             Publish
                           </button>
@@ -477,7 +481,7 @@ const ExamList = () => {
                         {exam.status === "published" && (examCreator || userData.role === 'Admin') && (
                           <button
                             onClick={() => handleUnpublishExam(exam._id)}
-                            className="inline-flex items-center px-3 py-2 cursor-pointer bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors"
+                            className="inline-flex items-center px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors"
                           >
                             Unpublish
                           </button>

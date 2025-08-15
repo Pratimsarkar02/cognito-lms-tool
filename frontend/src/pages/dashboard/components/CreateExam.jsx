@@ -27,6 +27,21 @@ const CreateExam = () => {
     instructions: ''
   });
 
+const convertISTToUTC = (istDateTime) => {
+  if (!istDateTime) return null;
+  // datetime-local gives local time, new Date() handles it correctly
+  const localDate = new Date(istDateTime);
+  return localDate.toISOString(); // Automatically converts to UTC
+};
+
+const getCurrentISTForInput = () => {
+  const now = new Date();
+  // Get current local time for datetime-local input
+  const offset = now.getTimezoneOffset() * 60000;
+  const localTime = new Date(now.getTime() - offset);
+  return localTime.toISOString().slice(0, 16);
+};
+
   // React Quill modules configuration
   const quillModules = {
     toolbar: [
@@ -130,18 +145,19 @@ const CreateExam = () => {
       const payload = {
         title: examData.title.trim(),
         description: examData.description,
-        startTime: examData.startTime,
-        endTime: examData.endTime,
+        startTime: convertISTToUTC(examData.startTime),
+        endTime: convertISTToUTC(examData.endTime),
         duration: parseInt(examData.duration),
         maxAttempts: parseInt(examData.maxAttempts),
         isShuffleQuestions: examData.isShuffleQuestions,
         isNegativeMarking: examData.isNegativeMarking,
         negativeMarkingPercentage: examData.isNegativeMarking ? parseFloat(examData.negativeMarkingPercentage) : 0,
         passingPercentage: parseFloat(examData.passingPercentage),
-        instructions: examData.instructions
+        instructions: examData.instructions,
+        timezone: 'Asia/Kolkata', // Assuming exams are in IST
       };
 
-      console.log('Sending payload:', payload);
+      console.log('Sending payload with UTC times:', payload);
 
       const response = await axios.post(
         `${backendUrl}/api/exams/`,
@@ -254,7 +270,7 @@ const CreateExam = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Start Time *
+                Start Time (IST) *
               </label>
               <input
                 type="datetime-local"
@@ -268,7 +284,7 @@ const CreateExam = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                End Time *
+                End Time (IST) *
               </label>
               <input
                 type="datetime-local"
