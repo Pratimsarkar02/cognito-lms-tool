@@ -414,7 +414,7 @@ const convertISTToUTC = (istDateTime) => {
                 name="startTime"
                 value={examData.startTime}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 cursor-pointer border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
               />
             </div>
@@ -428,7 +428,7 @@ const convertISTToUTC = (istDateTime) => {
                 name="endTime"
                 value={examData.endTime}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 cursor-pointer border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
               />
             </div>
@@ -506,9 +506,9 @@ const convertISTToUTC = (istDateTime) => {
                   name="isNegativeMarking"
                   checked={examData.isNegativeMarking}
                   onChange={handleInputChange}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  className="h-4 w-4 cursor-pointer text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
-                <label htmlFor="isNegativeMarking" className="text-sm font-medium text-gray-700">
+                <label htmlFor="isNegativeMarking" className="text-sm font-medium cursor-pointer text-gray-700">
                   Enable Negative Marking
                 </label>
               </div>
@@ -551,9 +551,9 @@ const convertISTToUTC = (istDateTime) => {
                   name="isShuffleQuestions"
                   checked={examData.isShuffleQuestions}
                   onChange={handleInputChange}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  className="h-4 w-4 cursor-pointer text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
-                <label htmlFor="isShuffleQuestions" className="text-sm font-medium text-gray-700">
+                <label htmlFor="isShuffleQuestions" className="text-sm cursor-pointer font-medium text-gray-700">
                   Shuffle Questions
                 </label>
               </div>

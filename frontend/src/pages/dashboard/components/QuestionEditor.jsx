@@ -1,4 +1,5 @@
 import { useContext, useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AppContent } from '../../../contexts/AppContext';
 import axios from 'axios';
@@ -363,21 +364,21 @@ const QuestionEditor = ({ initialQuestions = null }) => {
               </div>
               <button
                 onClick={expandAll}
-                className="px-3 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors flex items-center space-x-1"
+                className="px-3 py-1 cursor-pointer text-xs bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors flex items-center space-x-1"
               >
                 <Maximize2 className="h-3 w-3" />
                 <span>Expand All</span>
               </button>
               <button
                 onClick={collapseAllExceptLast}
-                className="px-3 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors flex items-center space-x-1"
+                className="px-3 py-1 cursor-pointer text-xs bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors flex items-center space-x-1"
               >
                 <Minimize2 className="h-3 w-3" />
                 <span>Collapse All</span>
               </button>
               <button
                 onClick={() => navigate(`/${userData.role.toLowerCase()}-dashboard/exams`)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center space-x-2 transition-colors"
+                className="px-4 py-2 cursor-pointer text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center space-x-2 transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" />
                 <span>Back to Exams</span>
@@ -385,7 +386,7 @@ const QuestionEditor = ({ initialQuestions = null }) => {
               <button
                 onClick={saveQuestions}
                 disabled={isSaving}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center space-x-2 transition-colors disabled:opacity-50"
+                className="px-4 py-2 cursor-pointer bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center space-x-2 transition-colors disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
                 <span>{isSaving ? 'Saving...' : 'Save Questions'}</span>
@@ -441,7 +442,7 @@ const QuestionEditor = ({ initialQuestions = null }) => {
                           removeQuestion(qIndex);
                         }}
                         disabled={questions.length === 1}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="p-2 cursor-pointer text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -461,7 +462,7 @@ const QuestionEditor = ({ initialQuestions = null }) => {
                           <select
                             value={question.questionType}
                             onChange={(e) => updateQuestion(qIndex, 'questionType', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            className="w-full px-3 py-2 cursor-pointer border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           >
                             <option value="mcq">Multiple Choice (Single Answer)</option>
                             <option value="msq">Multiple Select (Multiple Answers)</option>
@@ -521,7 +522,7 @@ const QuestionEditor = ({ initialQuestions = null }) => {
                           </label>
                           <button
                             onClick={() => addOption(qIndex)}
-                            className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1"
+                            className="px-3 py-1 cursor-pointer text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1"
                           >
                             <Plus className="h-3 w-3" />
                             <span>Add Option</span>
@@ -536,7 +537,7 @@ const QuestionEditor = ({ initialQuestions = null }) => {
                                 name={`question-${qIndex}-correct`}
                                 checked={option.isCorrect}
                                 onChange={(e) => updateOption(qIndex, optIndex, 'isCorrect', e.target.checked)}
-                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                className="h-4 w-4 cursor-pointer text-blue-600 focus:ring-blue-500 border-gray-300"
                               />
                               <input
                                 type="text"
@@ -548,7 +549,7 @@ const QuestionEditor = ({ initialQuestions = null }) => {
                               <button
                                 onClick={() => removeOption(qIndex, optIndex)}
                                 disabled={question.options.length <= 2}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="p-2 cursor-pointer text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
@@ -582,7 +583,7 @@ const QuestionEditor = ({ initialQuestions = null }) => {
           <div className="mt-6 text-center">
             <button
               onClick={addQuestion}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 mx-auto"
+              className="px-6 py-3 cursor-pointer bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 mx-auto"
             >
               <Plus className="h-5 w-5" />
               <span>Add Another Question</span>
@@ -618,6 +619,22 @@ const QuestionEditor = ({ initialQuestions = null }) => {
       </div>
     </div>
   );
+};
+QuestionEditor.propTypes = {
+  initialQuestions: PropTypes.arrayOf(
+    PropTypes.shape({
+      questionText: PropTypes.string,
+      questionType: PropTypes.string,
+      options: PropTypes.arrayOf(
+        PropTypes.shape({
+          text: PropTypes.string,
+          isCorrect: PropTypes.bool
+        })
+      ),
+      marks: PropTypes.number,
+      explanation: PropTypes.string
+    })
+  )
 };
 
 export default QuestionEditor;
