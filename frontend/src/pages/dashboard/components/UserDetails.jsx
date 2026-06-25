@@ -1,10 +1,1 @@
-
-const UserDetails = () => {
-  return (
-    <div>
-      
-    </div>
-  )
-}
-
-export default UserDetails;
+export { default } from './UserManagement';
