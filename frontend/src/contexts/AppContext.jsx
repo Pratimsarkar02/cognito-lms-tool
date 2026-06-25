@@ -73,6 +73,9 @@ export const AppContextProvider = ({ children }) => {
   return (
     <AppContent.Provider value={{
       authState,
+      setAuthState,
+      userData,
+      setUserData,
       checkAuthState,
       logout,
       backendUrl

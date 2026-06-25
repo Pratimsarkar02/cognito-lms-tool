@@ -82,7 +82,7 @@ const EmailVerify = () => {
         backendUrl + "/api/auth/verify-account",
         {
           otp,
-          userId: userData?.id,
+          userId: userData?._id,
         }
       );
 
@@ -105,11 +105,11 @@ const EmailVerify = () => {
   };
 
   useEffect(() => {
-    if (isLoggedIn && userData?.isAccountVerified) {
+    if (!isLoading && isLoggedIn && userData?.isAccountVerified) {
       const dashboardRoute = getDashboardRoute(userData.role);
       navigate(dashboardRoute);
     }
-  }, [isLoggedIn, userData, navigate]);
+  }, [isLoggedIn, userData, navigate, isLoading]);
 
   return (
     <div className="flex items-center justify-center min-h-screen px-6 sm:px-0 bg-gradient-to-br from-yellow-100 via-green-50 to-white">
