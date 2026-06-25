@@ -40,10 +40,10 @@ const App = () => {
           <Route path="/contact" element={<Contact />} />
           <Route path="/login" element={<Login />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/email-verify" element={<EmailVerify />} />
         </Route>
         {/* Protected Routes */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/email-verify" element={<EmailVerify />} />
 
           {/* Nested Routes for Student Dashboard */}
           <Route path="student-dashboard" element={<StudentDashboard />}>
