@@ -917,88 +917,78 @@ export const completeExamAttempt = async (req, res) => {
   }
 };
 
-// FIXED: Get My Exams with pagination (Faculty)
+// examController.js — replace getMyExams and getAllExams
+
 export const getMyExams = async (req, res) => {
   try {
     const { page, limit, sortBy, searchQuery, skip } = getPaginationParams(req);
+    const baseFilter = { createdBy: req.user.id };
+    const filter = buildSearchFilter(searchQuery, baseFilter);
 
-    const baseQuery = { 
-      $or: [
-        { createdBy: req.user.id },
-        { creatorId: req.user.id }
-      ]
-    };
-
-    const filter = buildSearchFilter(searchQuery, baseQuery);
+    console.log(`[getMyExams] userId=${req.user.id} role=${req.user.role}`);
 
     const [exams, total] = await Promise.all([
       Exam.find(filter)
+        .populate('createdBy', 'firstName lastName email role')  // ← populate creator
+        .select('-__v')                                           // ← do NOT restrict resultsStatus
         .sort(sortBy)
         .skip(skip)
         .limit(limit)
-        .select('-__v')
         .lean(),
-      Exam.countDocuments(filter)
+      Exam.countDocuments(filter),
     ]);
+
+    console.log(`[getMyExams] Found ${exams.length} exams`);
+    console.log(`[getMyExams] First exam resultsStatus:`, exams[0]?.resultsStatus);
 
     res.status(200).json({
       success: true,
       exams,
       pagination: {
-        currentPage: page,
-        itemsPerPage: limit,
-        totalItems: total,
-        totalPages: Math.ceil(total / limit)
-      }
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    console.error('[getMyExams] Error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// FIXED: Get All Exams with pagination (Admin)
 export const getAllExams = async (req, res) => {
   try {
     const { page, limit, sortBy, searchQuery, skip } = getPaginationParams(req);
-
     const filter = buildSearchFilter(searchQuery);
+
+    console.log(`[getAllExams] userId=${req.user.id} role=${req.user.role}`);
 
     const [exams, total] = await Promise.all([
       Exam.find(filter)
-        .populate('createdBy', 'firstName lastName')
+        .populate('createdBy', 'firstName lastName email role')  // ← MUST populate for Admin UI
+        .select('-__v')
         .sort(sortBy)
         .skip(skip)
         .limit(limit)
-        .select('-__v')
         .lean(),
-      Exam.countDocuments(filter)
+      Exam.countDocuments(filter),
     ]);
 
-    // Process exams to ensure consistent creator info
-    const processedExams = exams.map(exam => {
-      if (exam.createdBy && !exam.creatorId) {
-        exam.creatorId = typeof exam.createdBy === 'object' ? exam.createdBy._id : exam.createdBy;
-      }
-      return exam;
-    });
+    console.log(`[getAllExams] Found ${exams.length} exams`);
 
     res.status(200).json({
       success: true,
-      exams: processedExams,
+      exams,
       pagination: {
-        currentPage: page,
-        itemsPerPage: limit,
-        totalItems: total,
-        totalPages: Math.ceil(total / limit)
-      }
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    console.error('[getAllExams] Error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
