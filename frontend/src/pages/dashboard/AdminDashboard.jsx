@@ -15,9 +15,6 @@ const AdminDashboard = () => {
       {/* Navbar */}
       <Navbar userRole={userData?.role || "Admin"} />
       
-      {/* Email Verification Banner - if needed */}
-      <EmailVerificationBanner />
-      
       {/* Main Layout */}
       <div className="flex">
         {/* Sidebar */}

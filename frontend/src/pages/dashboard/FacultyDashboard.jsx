@@ -13,9 +13,6 @@ const FacultyDashboard = () => {
       {/* Navbar */}
       <Navbar userRole="Faculty" />
       
-      {/* Email Verification Banner - if needed */}
-      <EmailVerificationBanner />
-      
       {/* Main Layout */}
       <div className="flex">
         {/* Sidebar */}

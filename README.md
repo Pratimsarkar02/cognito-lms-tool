@@ -84,6 +84,8 @@ Frontend will start on `http://localhost:5173`
 ---
 
 ## 📂 Project Structure
+
+
 ```
 lms-app
 ├─ backend
@@ -257,4 +259,3 @@ Want to contribute? Feel free to fork the repo, create a feature branch, and sub
 For any queries or suggestions, feel free to reach out!
 - **Email**: help.cognito@gmail.com
 - **GitHub**: [Pratimsarkar02](https://github.com/Pratimsarkar02)
-

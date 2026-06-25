@@ -329,7 +329,7 @@ const ExamList = () => {
             <select
               value={state.sortBy}
               onChange={handleSortChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              className="w-full px-3 py-2 cursor-pointer border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
             >
               <option value="-createdAt">📅 Newest First</option>
               <option value="createdAt">📅 Oldest First</option>
@@ -346,7 +346,7 @@ const ExamList = () => {
             <select
               value={state.limit}
               onChange={handleLimitChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              className="w-full px-3 py-2 cursor-pointer border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
             >
               <option value={5}>5 per page</option>
               <option value={10}>10 per page</option>
@@ -436,7 +436,7 @@ const ExamList = () => {
                         <div className="flex items-center justify-center space-x-2">
                           <button
                             onClick={() => handleEditExam(exam._id)}
-                            className="inline-flex items-center px-3 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium rounded-lg transition-colors"
+                            className="inline-flex cursor-pointer items-center px-3 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium rounded-lg transition-colors"
                           >
                             <Edit className="h-3 w-3 mr-1" />
                             Edit
@@ -444,7 +444,7 @@ const ExamList = () => {
                           
                           <button
                             onClick={() => navigate(`/${userData.role.toLowerCase()}-dashboard/exams/${exam._id}/questions`)}
-                            className="inline-flex items-center px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-colors"
+                            className="inline-flex cursor-pointer items-center px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-colors"
                           >
                             <PenTool className="h-3 w-3 mr-1" />
                             Questions
@@ -452,7 +452,7 @@ const ExamList = () => {
                           
                           <button
                             onClick={() => handleDeleteExam(exam._id)}
-                            className="inline-flex items-center px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors"
+                            className="inline-flex cursor-pointer items-center px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors"
                           >
                             <Trash className="h-3 w-3 mr-1" />
                             Delete
@@ -472,7 +472,7 @@ const ExamList = () => {
                         {exam.status === "draft" && (examCreator || userData.role === 'Admin') && (
                           <button
                             onClick={() => handlePublishExam(exam._id)}
-                            className="inline-flex items-center px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+                            className="inline-flex cursor-pointer items-center px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
                           >
                             Publish
                           </button>
@@ -481,7 +481,7 @@ const ExamList = () => {
                         {exam.status === "published" && (examCreator || userData.role === 'Admin') && (
                           <button
                             onClick={() => handleUnpublishExam(exam._id)}
-                            className="inline-flex items-center px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors"
+                            className="inline-flex cursor-pointer items-center px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors"
                           >
                             Unpublish
                           </button>
