@@ -61,6 +61,11 @@ const examSchema = new mongoose.Schema({
     enum: ['draft', 'published', 'archived'], 
     default: 'draft' 
   },
+  resultsStatus: {
+  type: String,
+  enum: ['pending', 'generated', 'published'],
+  default: 'pending'
+},
   instructions: { 
     type: String, 
     default: '' 

@@ -1,48 +1,37 @@
+// resultRoutes.js — complete rewrite
 import express from 'express';
 import {
-  getStudentResult,
-  exportExamResults,
   getResults,
   generateResults,
-  getAllStudentResults
+  publishResults,
+  unpublishResults,
+  getAllStudentResults,
+  exportExamResults,
 } from '../controllers/resultController.js';
-import {
-  isFacultyOrAdmin
-} from '../middleware/roleMiddleware.js';
+import { isFacultyOrAdmin } from '../middleware/roleMiddleware.js';
 import userAuth from '../middleware/userAuth.js';
 
 const router = express.Router();
 
-// Generate Results (Faculty/Admin only)
-router.post(
-  '/:examId/results/generate',
-  userAuth,
-  isFacultyOrAdmin,
-  generateResults
-);
+// ⚠️  ORDER MATTERS: '/all' MUST come before '/:examId'
+// If /:examId is first, Express treats the string "all" as an examId — silent bug.
 
-// Get all results for logged-in user or specified student
-router.get(
-  '/all',
-  userAuth,
-  getAllStudentResults
-);
+// GET all results filtered by logged-in user's role (Student/Faculty/Admin)
+router.get('/all', userAuth, getAllStudentResults);
 
-// Get Results for a specific exam (Authenticated users)
-router.get(
-  '/:examId',
-  userAuth,
-  getResults
-);
+// POST generate results for an exam (Faculty/Admin only)
+router.post('/:examId/generate', userAuth, isFacultyOrAdmin, generateResults);
 
+// PATCH publish results — makes results visible to students (Faculty/Admin only)
+router.patch('/:examId/publish', userAuth, isFacultyOrAdmin, publishResults);
 
+// PATCH unpublish results — hides from students again (Faculty/Admin only)
+router.patch('/:examId/unpublish', userAuth, isFacultyOrAdmin, unpublishResults);
 
-// Export Results (Faculty/Admin only)
-router.get(
-  '/:examId/export-results',
-  userAuth,
-  isFacultyOrAdmin,
-  exportExamResults
-);
+// GET export results as CSV (Faculty/Admin only) — must be before /:examId
+router.get('/:examId/export', userAuth, isFacultyOrAdmin, exportExamResults);
+
+// GET results for one specific exam (role-filtered — MUST be last wildcard)
+router.get('/:examId', userAuth, getResults);
 
 export default router;
