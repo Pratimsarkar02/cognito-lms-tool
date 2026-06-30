@@ -1,112 +1,49 @@
-import { useContext, useRef, useState, useEffect } from "react";
+// frontend/src/components/dashboard/Navbar.jsx
+import { useContext } from "react";
 import PropTypes from "prop-types";
 import { AppContent } from "../../contexts/AppContext";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Settings, User } from "lucide-react";
+import { LogOut } from "lucide-react";
+import UserAvatar from "./UserAvatar";
 
-const Navbar = ({ userRole = "user" }) => {
+// Map each role to its profile route
+const PROFILE_ROUTES = {
+  Admin:   "/admin-profile",
+  Faculty: "/faculty-profile",
+  Student: "/student-profile",
+};
+
+const Navbar = ({ userRole = "Student" }) => {
   const navigate = useNavigate();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
-  const { 
-    authState: { userData }, 
-    logout 
+  const {
+    authState: { userData },
+    logout,
   } = useContext(AppContent);
 
-  // Get display name from userData
-  const getDisplayName = () => {
-    if (!userData) return userRole;
-    return userData.name || `${userData.firstName} ${userData.lastName}` || userRole;
-  };
-
-  // Handle click outside to close dropdown
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  // Get role-specific navigation items
-  const getRoleSpecificMenuItems = () => {
-    const menuItems = {
-      Admin: [
-        { label: "Settings", icon: Settings, action: () => navigate("/admin-settings") },
-        { label: "Profile", icon: User, action: () => navigate("/admin-profile") }
-      ],
-      Faculty: [
-        { label: "My Courses", icon: User, action: () => navigate("/faculty-courses") },
-        { label: "Profile", icon: User, action: () => navigate("/faculty-profile") }
-      ],
-      Student: [
-        { label: "My Learning", icon: User, action: () => navigate("/student-learning") },
-        { label: "Profile", icon: User, action: () => navigate("/student-profile") }
-      ]
-    };
-
-    return menuItems[userRole] || menuItems.Student;
-  };
-
-  const menuItems = getRoleSpecificMenuItems();
-  const displayName = getDisplayName();
+  const firstName = userData?.firstName || "";
+  const lastName  = userData?.lastName  || "";
+  const greeting  = firstName || userRole;
+  const profileRoute = PROFILE_ROUTES[userRole] || "/student-profile";
 
   return (
-    <nav className="navbar fixed top-0 w-full flex justify-between items-center p-4 bg-gray-800 text-white z-40 h-16">
-      <div className="navbar-brand font-medium text-lg">
-        Hey {displayName}!
-      </div>
-      
-      <ul className="navbar-menu flex items-center list-none m-0 p-0">
-        <div 
-          ref={dropdownRef}
-          className="mx-4 relative"
-        >
-          <button 
-            onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex justify-center items-center text-white bg-gray-500 w-8 h-8 border-2 border-white rounded-full hover:bg-gray-600 transition-colors cursor-pointer"
-          >
-            {displayName[0].toUpperCase()}
-          </button>
-          
-          {dropdownOpen && (
-            <ul className="absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white text-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
-              {menuItems.map((item, index) => (
-                <li
-                  key={index}
-                  onClick={() => {
-                    item.action();
-                    setDropdownOpen(false);
-                  }}
-                  className="py-2 px-4 hover:bg-gray-100 cursor-pointer flex items-center gap-2 text-sm"
-                >
-                  <item.icon className="w-4 h-4" />
-                  {item.label}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+    <nav className="fixed top-0 w-full flex justify-between items-center px-4 h-16 bg-gray-800 text-white z-40">
+      {/* Left: greeting */}
+      <span className="font-medium text-lg">Hey {greeting}!</span>
+
+      {/* Right: avatar + logout */}
+      <div className="flex items-center gap-3">
 
         <button
           onClick={logout}
-          className="navbar-item mx-4 flex items-center cursor-pointer hover:text-gray-300 transition-colors"
+          className="flex items-center hover:text-gray-300 transition-colors cursor-pointer"
           aria-label="Logout"
         >
           <LogOut className="w-6 h-6" />
         </button>
-      </ul>
+      </div>
     </nav>
   );
 };
 
-Navbar.propTypes = {
-  userRole: PropTypes.string
-};
-
+Navbar.propTypes = { userRole: PropTypes.string };
 export default Navbar;
