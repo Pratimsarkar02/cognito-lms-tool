@@ -7,7 +7,8 @@ import { useContext, useState, useEffect, useMemo } from 'react';
 import { AppContent } from '../../../contexts/AppContext';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { UserCircle2, Pencil, X, Check, ShieldCheck, BookOpen, GraduationCap } from 'lucide-react';
+import {  Pencil, Camera,  X, Check, ShieldCheck, BookOpen, GraduationCap } from 'lucide-react';
+import UserAvatar from '../../../components/dashboard/UserAvatar';
 
 const roleMeta = {
   Admin:   { label: 'Administrator',  cls: 'bg-purple-100 text-purple-700', Icon: ShieldCheck },
@@ -118,22 +119,28 @@ const UserProfile = () => {
         <h2 className="text-xl font-bold text-gray-800">My Profile</h2>
         <p className="text-sm text-gray-400 mt-0.5">View and update your personal details</p>
       </div>
-
+{/* flex items-center gap-4 px-5 py-5 border-b border-gray-100 */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="flex items-center gap-4 px-5 py-5 border-b border-gray-100">
-          <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">
-            <UserCircle2 size={36} />
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900 text-base">
-              {displayUser.firstName} {displayUser.lastName}
-            </p>
-            <p className="text-xs text-gray-400">{displayUser.email}</p>
-            <span className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${roleCls}`}>
-              <RoleIcon size={11} /> {roleLabel}
-            </span>
-          </div>
-        </div>
+        <div className="relative px-2 py-2 w-fit group">
+  <UserAvatar
+    firstName={displayUser.firstName}
+    lastName={displayUser.lastName}
+    size="lg"
+  />
+
+  <button
+    type="button"
+    onClick={(e) => e.preventDefault()}
+    className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:bg-gray-50 cursor-not-allowed"
+    aria-label="Profile photo upload coming soon"
+  >
+    <Camera size={14} />
+  </button>
+
+  <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-max -translate-x-1/2 rounded-md bg-gray-900 px-2 py-1 text-[11px] text-white opacity-0 shadow transition-opacity duration-200 group-hover:opacity-100">
+    Photo upload coming soon
+  </div>
+</div>
 
         <div className="px-5 py-4 space-y-4">
           <div>
