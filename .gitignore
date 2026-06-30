@@ -8,6 +8,8 @@ Thumbs.db
 # 🌟 Node.js Dependencies (Frontend & Backend)
 # ===========================
 node_modules/
+backend/node_modules/
+frontend/node_modules/
 
 # ===========================
 # 🌟 Environment Variables (Sensitive Data)
