@@ -28,6 +28,7 @@ const userAuth = async (req, res, next) => {
 
     req.user = {
       id: user._id, // Using DB _id instead of token payload
+      _id: user._id,
       role: user.role,
       isVerified: user.isAccountVerified,
       email: user.email,

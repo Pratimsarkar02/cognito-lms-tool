@@ -13,6 +13,7 @@ import resultRoutes from './routes/resultRoutes.js';
 
 import examLogRoutes from './routes/examLogRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 
 import cron from 'node-cron';
 import { updateExamAnalytics } from './controllers/analyticsController.js';
@@ -65,6 +66,8 @@ app.use('/api/results', resultRoutes);
 
 app.use('/api/logs', examLogRoutes);
 app.use('/api/analytics', analyticsRoutes);
+
+app.use('/api/notifications', notificationRoutes);
 
 app.use((err, req, res, next) => {
     console.error(err.stack);
