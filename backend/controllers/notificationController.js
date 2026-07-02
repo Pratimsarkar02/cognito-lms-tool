@@ -3,6 +3,8 @@ import multer from "multer";
 import Notification from "../models/notificationModel.js";
 import cloudinary from "../config/cloudinary.js";
 
+const ALLOWED_REACTIONS = ["like", "support", "love", "insightful"];
+
 const sanitizePublicIdPart = (value = "") => {
   return value
     .replace(/\.[^/.]+$/, "")
@@ -16,6 +18,30 @@ const getCloudinaryResourceType = (mimeType = "") => {
   if (mimeType.startsWith("image/")) return "image";
   if (mimeType.startsWith("video/")) return "video";
   return "raw";
+};
+
+const emitNotificationEvent = (req, eventName, payload) => {
+  const io = req.app.get("io");
+  if (io) {
+    io.emit(eventName, payload);
+  }
+};
+
+const canModerateNotification = (user) => {
+  return !!user && ["Admin", "Faculty"].includes(user.role);
+};
+
+const canManageNotification = (user, notification) => {
+  if (!user || !notification) return false;
+  const isAdmin = user.role === "Admin";
+  const isCreator = notification.createdBy.toString() === user.id.toString();
+  return isAdmin || isCreator;
+};
+
+const canAccessNotification = (user, notification) => {
+  if (!user || !notification) return false;
+  if (user.role === "Admin") return true;
+  return notification.targetRoles.includes(user.role);
 };
 
 const uploadBufferToCloudinary = (fileBuffer, folder, originalname) =>
@@ -85,7 +111,7 @@ const handleUploadError = (error, res) => {
     });
   }
 
-  if (error.message === "Unsupported file type") {
+  if (error.message?.includes("Unsupported file type")) {
     return res.status(400).json({
       success: false,
       message:
@@ -95,15 +121,52 @@ const handleUploadError = (error, res) => {
 
   return res.status(500).json({
     success: false,
-    message: "Internal Server Error",
+    message: error.message || "Internal Server Error",
   });
 };
 
-export const createNotification = async (req, res, next) => {
+const parseRoleArray = (targetRoles, fallback = ["Student"]) => {
+  if (typeof targetRoles === "string") {
+    try {
+      const parsed = JSON.parse(targetRoles);
+      return Array.isArray(parsed) && parsed.length ? parsed : fallback;
+    } catch {
+      return targetRoles ? [targetRoles] : fallback;
+    }
+  }
+
+  if (Array.isArray(targetRoles) && targetRoles.length) {
+    return targetRoles;
+  }
+
+  return fallback;
+};
+
+const parseStringArray = (value) => {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [value];
+    } catch {
+      return value ? [value] : [];
+    }
+  }
+
+  return Array.isArray(value) ? value : [];
+};
+
+const getNotificationWithPopulates = async (id) => {
+  return Notification.findById(id)
+    .populate("createdBy", "firstName lastName email role profileImage")
+    .populate("comments.userId", "firstName lastName email role profileImage")
+    .lean();
+};
+
+export const createNotification = async (req, res) => {
   try {
     const user = req.user;
 
-    if (!user || !["Admin", "Faculty"].includes(user.role)) {
+    if (!canModerateNotification(user)) {
       return res.status(403).json({ success: false, message: "Not authorized" });
     }
 
@@ -125,18 +188,7 @@ export const createNotification = async (req, res, next) => {
       });
     }
 
-    let parsedTargetRoles = [];
-
-    if (typeof targetRoles === "string") {
-      try {
-        parsedTargetRoles = JSON.parse(targetRoles);
-      } catch {
-        parsedTargetRoles = [targetRoles];
-      }
-    } else if (Array.isArray(targetRoles)) {
-      parsedTargetRoles = targetRoles;
-    }
-
+    const parsedTargetRoles = parseRoleArray(targetRoles);
     const attachments = [];
 
     if (req.files?.length) {
@@ -162,8 +214,7 @@ export const createNotification = async (req, res, next) => {
       description: description.trim(),
       createdBy: user.id,
       category: category || "announcement",
-      targetRoles:
-        parsedTargetRoles.length > 0 ? parsedTargetRoles : ["Student"],
+      targetRoles: parsedTargetRoles,
       attachments,
       externalLink: externalLink || "",
       eventDate: eventDate || null,
@@ -171,9 +222,11 @@ export const createNotification = async (req, res, next) => {
       status: status || "published",
     });
 
-    const populatedNotification = await Notification.findById(notification._id)
-      .populate("createdBy", "firstName lastName email role profileImage")
-      .lean();
+    const populatedNotification = await getNotificationWithPopulates(notification._id);
+
+    emitNotificationEvent(req, "notification:created", {
+      notification: populatedNotification,
+    });
 
     return res.status(201).json({
       success: true,
@@ -206,6 +259,7 @@ export const getNotifications = async (req, res, next) => {
     const [notifications, total] = await Promise.all([
       Notification.find(query)
         .populate("createdBy", "firstName lastName email role profileImage")
+        .populate("comments.userId", "firstName lastName email role profileImage")
         .sort({ isPinned: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -233,18 +287,21 @@ export const getNotificationById = async (req, res, next) => {
     const user = req.user;
     const { id } = req.params;
 
-    const notification = await Notification.findOne({
-      _id: id,
-      deletedAt: null,
-      targetRoles: user.role,
-    })
+    const notification = await Notification.findById(id)
       .populate("createdBy", "firstName lastName email role profileImage")
       .populate("comments.userId", "firstName lastName email role profileImage");
 
-    if (!notification) {
+    if (!notification || notification.deletedAt) {
       return res.status(404).json({
         success: false,
         message: "Notification not found",
+      });
+    }
+
+    if (!canAccessNotification(user, notification)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to view this notification",
       });
     }
 
@@ -257,7 +314,7 @@ export const getNotificationById = async (req, res, next) => {
   }
 };
 
-export const updateNotification = async (req, res, next) => {
+export const updateNotification = async (req, res) => {
   try {
     const user = req.user;
     const { id } = req.params;
@@ -271,10 +328,7 @@ export const updateNotification = async (req, res, next) => {
       });
     }
 
-    const isCreator = notification.createdBy.toString() === user.id.toString();
-    const isAdmin = user.role === "Admin";
-
-    if (!isCreator && !isAdmin) {
+    if (!canManageNotification(user, notification)) {
       return res.status(403).json({
         success: false,
         message: "Not authorized to update this notification",
@@ -293,28 +347,8 @@ export const updateNotification = async (req, res, next) => {
       removedAttachmentIds,
     } = req.body;
 
-    let parsedTargetRoles = notification.targetRoles;
-    let parsedRemovedAttachmentIds = [];
-
-    if (typeof targetRoles === "string") {
-      try {
-        parsedTargetRoles = JSON.parse(targetRoles);
-      } catch {
-        parsedTargetRoles = [targetRoles];
-      }
-    } else if (Array.isArray(targetRoles)) {
-      parsedTargetRoles = targetRoles;
-    }
-
-    if (typeof removedAttachmentIds === "string") {
-      try {
-        parsedRemovedAttachmentIds = JSON.parse(removedAttachmentIds);
-      } catch {
-        parsedRemovedAttachmentIds = [removedAttachmentIds];
-      }
-    } else if (Array.isArray(removedAttachmentIds)) {
-      parsedRemovedAttachmentIds = removedAttachmentIds;
-    }
+    const parsedTargetRoles = parseRoleArray(targetRoles, notification.targetRoles);
+    const parsedRemovedAttachmentIds = parseStringArray(removedAttachmentIds);
 
     if (title !== undefined) notification.title = title.trim();
     if (description !== undefined) notification.description = description.trim();
@@ -325,6 +359,7 @@ export const updateNotification = async (req, res, next) => {
       notification.isPinned = String(isPinned) === "true" || isPinned === true;
     }
     if (status !== undefined) notification.status = status;
+
     notification.targetRoles = parsedTargetRoles;
     notification.editedAt = new Date();
 
@@ -345,6 +380,14 @@ export const updateNotification = async (req, res, next) => {
 
     if (req.files?.length) {
       for (const file of req.files) {
+        const alreadyExists = notification.attachments.some(
+          (attachment) =>
+            attachment.fileName === file.originalname &&
+            attachment.fileSize === file.size
+        );
+
+        if (alreadyExists) continue;
+
         const uploaded = await uploadBufferToCloudinary(
           file.buffer,
           "cognito-lms/notifications",
@@ -363,9 +406,11 @@ export const updateNotification = async (req, res, next) => {
 
     await notification.save();
 
-    const updatedNotification = await Notification.findById(notification._id)
-      .populate("createdBy", "firstName lastName email role profileImage")
-      .lean();
+    const updatedNotification = await getNotificationWithPopulates(notification._id);
+
+    emitNotificationEvent(req, "notification:updated", {
+      notification: updatedNotification,
+    });
 
     return res.status(200).json({
       success: true,
@@ -378,7 +423,7 @@ export const updateNotification = async (req, res, next) => {
   }
 };
 
-export const deleteNotification = async (req, res, next) => {
+export const deleteNotification = async (req, res) => {
   try {
     const user = req.user;
     const { id } = req.params;
@@ -392,10 +437,7 @@ export const deleteNotification = async (req, res, next) => {
       });
     }
 
-    const isCreator = notification.createdBy.toString() === user.id.toString();
-    const isAdmin = user.role === "Admin";
-
-    if (!isCreator && !isAdmin) {
+    if (!canManageNotification(user, notification)) {
       return res.status(403).json({
         success: false,
         message: "Not authorized to delete this notification",
@@ -408,6 +450,10 @@ export const deleteNotification = async (req, res, next) => {
 
     await Notification.findByIdAndDelete(id);
 
+    emitNotificationEvent(req, "notification:deleted", {
+      notificationId: id,
+    });
+
     return res.status(200).json({
       success: true,
       message: "Notification and related attachments deleted successfully",
@@ -418,5 +464,503 @@ export const deleteNotification = async (req, res, next) => {
       success: false,
       message: error.message || "Failed to delete notification",
     });
+  }
+};
+
+export const reactToNotification = async (req, res, next) => {
+  try {
+    const user = req.user;
+    const { id } = req.params;
+    const { type } = req.body;
+
+    if (!ALLOWED_REACTIONS.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid reaction type",
+      });
+    }
+
+    const notification = await Notification.findById(id);
+
+    if (!notification || notification.deletedAt || notification.status !== "published") {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    if (!canAccessNotification(user, notification)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to react to this notification",
+      });
+    }
+
+    const existingReaction = notification.reactions.find(
+      (reaction) => reaction.userId.toString() === user.id.toString()
+    );
+
+    if (existingReaction) {
+      existingReaction.type = type;
+    } else {
+      notification.reactions.push({
+        userId: user.id,
+        type,
+      });
+    }
+
+    await notification.save();
+
+    const updatedNotification = await getNotificationWithPopulates(notification._id);
+
+    emitNotificationEvent(req, "notification:reacted", {
+      notificationId: notification._id,
+      reactions: updatedNotification.reactions,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Reaction saved successfully",
+      notification: updatedNotification,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const removeReactionFromNotification = async (req, res, next) => {
+  try {
+    const user = req.user;
+    const { id } = req.params;
+
+    const notification = await Notification.findById(id);
+
+    if (!notification || notification.deletedAt || notification.status !== "published") {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    if (!canAccessNotification(user, notification)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to remove reaction from this notification",
+      });
+    }
+
+    const originalLength = notification.reactions.length;
+
+    notification.reactions = notification.reactions.filter(
+      (reaction) => reaction.userId.toString() !== user.id.toString()
+    );
+
+    if (notification.reactions.length === originalLength) {
+      return res.status(404).json({
+        success: false,
+        message: "Reaction not found",
+      });
+    }
+
+    await notification.save();
+
+    const updatedNotification = await getNotificationWithPopulates(notification._id);
+
+    emitNotificationEvent(req, "notification:reaction_removed", {
+      notificationId: notification._id,
+      reactions: updatedNotification.reactions,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Reaction removed successfully",
+      notification: updatedNotification,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const addCommentToNotification = async (req, res, next) => {
+  try {
+    const user = req.user;
+    const { id } = req.params;
+    const { text } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Comment text is required",
+      });
+    }
+
+    const notification = await Notification.findById(id);
+
+    if (!notification || notification.deletedAt || notification.status !== "published") {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    if (!canAccessNotification(user, notification)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to comment on this notification",
+      });
+    }
+
+    notification.comments.push({
+      userId: user.id,
+      text: text.trim(),
+    });
+
+    await notification.save();
+
+    const updatedNotification = await getNotificationWithPopulates(notification._id);
+
+    emitNotificationEvent(req, "notification:comment_added", {
+      notificationId: notification._id,
+      comments: updatedNotification.comments,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Comment added successfully",
+      notification: updatedNotification,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateCommentOnNotification = async (req, res, next) => {
+  try {
+    const user = req.user;
+    const { id, commentId } = req.params;
+    const { text } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Comment text is required",
+      });
+    }
+
+    const notification = await Notification.findById(id);
+
+    if (!notification || notification.deletedAt) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    const comment = notification.comments.id(commentId);
+
+    if (!comment) {
+      return res.status(404).json({
+        success: false,
+        message: "Comment not found",
+      });
+    }
+
+    const isCommentOwner = comment.userId.toString() === user.id.toString();
+    const isAdmin = user.role === "Admin";
+
+    if (!isCommentOwner && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to update this comment",
+      });
+    }
+
+    comment.text = text.trim();
+    comment.editedAt = new Date();
+
+    await notification.save();
+
+    const updatedNotification = await getNotificationWithPopulates(notification._id);
+
+    emitNotificationEvent(req, "notification:comment_updated", {
+      notificationId: notification._id,
+      comments: updatedNotification.comments,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Comment updated successfully",
+      notification: updatedNotification,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteCommentFromNotification = async (req, res, next) => {
+  try {
+    const user = req.user;
+    const { id, commentId } = req.params;
+
+    const notification = await Notification.findById(id);
+
+    if (!notification || notification.deletedAt) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    const comment = notification.comments.id(commentId);
+
+    if (!comment) {
+      return res.status(404).json({
+        success: false,
+        message: "Comment not found",
+      });
+    }
+
+    const isCommentOwner = comment.userId.toString() === user.id.toString();
+    const isAdmin = user.role === "Admin";
+    const isNotificationOwner = notification.createdBy.toString() === user.id.toString();
+
+    if (!isCommentOwner && !isAdmin && !isNotificationOwner) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to delete this comment",
+      });
+    }
+
+    comment.deleteOne();
+    await notification.save();
+
+    const updatedNotification = await getNotificationWithPopulates(notification._id);
+
+    emitNotificationEvent(req, "notification:comment_deleted", {
+      notificationId: notification._id,
+      comments: updatedNotification.comments,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Comment deleted successfully",
+      notification: updatedNotification,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAllNotificationsForModeration = async (req, res, next) => {
+  try {
+    const user = req.user;
+
+    if (!canModerateNotification(user)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized",
+      });
+    }
+
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 100);
+    const skip = (page - 1) * limit;
+    const status = req.query.status;
+
+    const query = {
+      deletedAt: null,
+    };
+
+    if (status && ["published", "archived"].includes(status)) {
+      query.status = status;
+    }
+
+    if (user.role !== "Admin") {
+      query.createdBy = user.id;
+    }
+
+    const [notifications, total] = await Promise.all([
+      Notification.find(query)
+        .populate("createdBy", "firstName lastName email role profileImage")
+        .populate("comments.userId", "firstName lastName email role profileImage")
+        .sort({ isPinned: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Notification.countDocuments(query),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      notifications,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const archiveNotification = async (req, res, next) => {
+  try {
+    const user = req.user;
+    const { id } = req.params;
+
+    const notification = await Notification.findById(id);
+
+    if (!notification || notification.deletedAt) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    if (!canManageNotification(user, notification)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to archive this notification",
+      });
+    }
+
+    notification.status = "archived";
+    await notification.save();
+
+    const updatedNotification = await getNotificationWithPopulates(notification._id);
+
+    emitNotificationEvent(req, "notification:archived", {
+      notification: updatedNotification,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification archived successfully",
+      notification: updatedNotification,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const publishNotification = async (req, res, next) => {
+  try {
+    const user = req.user;
+    const { id } = req.params;
+
+    const notification = await Notification.findById(id);
+
+    if (!notification || notification.deletedAt) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    if (!canManageNotification(user, notification)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to publish this notification",
+      });
+    }
+
+    notification.status = "published";
+    await notification.save();
+
+    const updatedNotification = await getNotificationWithPopulates(notification._id);
+
+    emitNotificationEvent(req, "notification:published", {
+      notification: updatedNotification,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification published successfully",
+      notification: updatedNotification,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const pinNotification = async (req, res, next) => {
+  try {
+    const user = req.user;
+    const { id } = req.params;
+
+    const notification = await Notification.findById(id);
+
+    if (!notification || notification.deletedAt) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    if (!canManageNotification(user, notification)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to pin this notification",
+      });
+    }
+
+    notification.isPinned = true;
+    await notification.save();
+
+    const updatedNotification = await getNotificationWithPopulates(notification._id);
+
+    emitNotificationEvent(req, "notification:pinned", {
+      notification: updatedNotification,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification pinned successfully",
+      notification: updatedNotification,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const unpinNotification = async (req, res, next) => {
+  try {
+    const user = req.user;
+    const { id } = req.params;
+
+    const notification = await Notification.findById(id);
+
+    if (!notification || notification.deletedAt) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    if (!canManageNotification(user, notification)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to unpin this notification",
+      });
+    }
+
+    notification.isPinned = false;
+    await notification.save();
+
+    const updatedNotification = await getNotificationWithPopulates(notification._id);
+
+    emitNotificationEvent(req, "notification:unpinned", {
+      notification: updatedNotification,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification unpinned successfully",
+      notification: updatedNotification,
+    });
+  } catch (error) {
+    next(error);
   }
 };

@@ -53,6 +53,8 @@ const io = new Server(httpServer,  {
     },
 });
 
+app.set("io", io);
+
 //API Endpoints 
 app.get('/', (req, res) => res.send("API is running..."));
 app.use('/api/auth', authRouter);
