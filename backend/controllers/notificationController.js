@@ -20,11 +20,37 @@ const getCloudinaryResourceType = (mimeType = "") => {
   return "raw";
 };
 
-const emitNotificationEvent = (req, eventName, payload) => {
+// Emits a notification event to specific role rooms (e.g. role:Student, role:Faculty).
+// Falls back to a global emit only if no roles are passed (used for hard deletes).
+const emitToRoles = (req, eventName, payload, roles = []) => {
   const io = req.app.get("io");
-  if (io) {
-    io.emit(eventName, payload);
+  if (!io) {
+    console.log(`[Socket] Skipped emit "${eventName}" — io instance not found on app`);
+    return;
   }
+
+  if (!roles.length) {
+    console.log(`[Socket] Emitting "${eventName}" globally (no roles specified)`);
+    io.emit(eventName, payload);
+    return;
+  }
+
+  roles.forEach((role) => {
+    console.log(`[Socket] Emitting "${eventName}" to room role:${role}`);
+    io.to(`role:${role}`).emit(eventName, payload);
+  });
+};
+
+// Emits a notification event to one specific user's private room (user:<id>).
+// Currently unused by default flows, but kept ready for per-user targeted alerts later.
+const emitToUser = (req, eventName, payload, userId) => {
+  const io = req.app.get("io");
+  if (!io || !userId) {
+    console.log(`[Socket] Skipped emit "${eventName}" — missing io or userId`);
+    return;
+  }
+  console.log(`[Socket] Emitting "${eventName}" to room user:${userId}`);
+  io.to(`user:${userId}`).emit(eventName, payload);
 };
 
 const canModerateNotification = (user) => {
@@ -224,9 +250,13 @@ export const createNotification = async (req, res) => {
 
     const populatedNotification = await getNotificationWithPopulates(notification._id);
 
-    emitNotificationEvent(req, "notification:created", {
-      notification: populatedNotification,
-    });
+    // Fired when a new notification is created — only targeted roles should receive this live.
+    emitToRoles(
+      req,
+      "notification:created",
+      { notification: populatedNotification },
+      populatedNotification.targetRoles
+    );
 
     return res.status(201).json({
       success: true,
@@ -408,9 +438,13 @@ export const updateNotification = async (req, res) => {
 
     const updatedNotification = await getNotificationWithPopulates(notification._id);
 
-    emitNotificationEvent(req, "notification:updated", {
-      notification: updatedNotification,
-    });
+    // Fired on any edit (title, description, attachments, targetRoles, etc).
+    emitToRoles(
+      req,
+      "notification:updated",
+      { notification: updatedNotification },
+      updatedNotification.targetRoles
+    );
 
     return res.status(200).json({
       success: true,
@@ -448,11 +482,17 @@ export const deleteNotification = async (req, res) => {
       await deleteFromCloudinary(notification.attachments);
     }
 
+    const affectedRoles = notification.targetRoles;
+
     await Notification.findByIdAndDelete(id);
 
-    emitNotificationEvent(req, "notification:deleted", {
-      notificationId: id,
-    });
+    // Fired on hard delete — document is gone, so we notify its former target roles directly.
+    emitToRoles(
+      req,
+      "notification:deleted",
+      { notificationId: id },
+      affectedRoles
+    );
 
     return res.status(200).json({
       success: true,
@@ -513,10 +553,13 @@ export const reactToNotification = async (req, res, next) => {
 
     const updatedNotification = await getNotificationWithPopulates(notification._id);
 
-    emitNotificationEvent(req, "notification:reacted", {
-      notificationId: notification._id,
-      reactions: updatedNotification.reactions,
-    });
+    // Fired whenever any user reacts or changes their reaction type.
+    emitToRoles(
+      req,
+      "notification:reacted",
+      { notificationId: notification._id, reactions: updatedNotification.reactions },
+      updatedNotification.targetRoles
+    );
 
     return res.status(200).json({
       success: true,
@@ -566,10 +609,13 @@ export const removeReactionFromNotification = async (req, res, next) => {
 
     const updatedNotification = await getNotificationWithPopulates(notification._id);
 
-    emitNotificationEvent(req, "notification:reaction_removed", {
-      notificationId: notification._id,
-      reactions: updatedNotification.reactions,
-    });
+    // Fired when a user removes their own reaction.
+    emitToRoles(
+      req,
+      "notification:reaction_removed",
+      { notificationId: notification._id, reactions: updatedNotification.reactions },
+      updatedNotification.targetRoles
+    );
 
     return res.status(200).json({
       success: true,
@@ -619,10 +665,13 @@ export const addCommentToNotification = async (req, res, next) => {
 
     const updatedNotification = await getNotificationWithPopulates(notification._id);
 
-    emitNotificationEvent(req, "notification:comment_added", {
-      notificationId: notification._id,
-      comments: updatedNotification.comments,
-    });
+    // Fired when a new comment is added.
+    emitToRoles(
+      req,
+      "notification:comment_added",
+      { notificationId: notification._id, comments: updatedNotification.comments },
+      updatedNotification.targetRoles
+    );
 
     return res.status(201).json({
       success: true,
@@ -682,10 +731,13 @@ export const updateCommentOnNotification = async (req, res, next) => {
 
     const updatedNotification = await getNotificationWithPopulates(notification._id);
 
-    emitNotificationEvent(req, "notification:comment_updated", {
-      notificationId: notification._id,
-      comments: updatedNotification.comments,
-    });
+    // Fired when a comment is edited.
+    emitToRoles(
+      req,
+      "notification:comment_updated",
+      { notificationId: notification._id, comments: updatedNotification.comments },
+      updatedNotification.targetRoles
+    );
 
     return res.status(200).json({
       success: true,
@@ -736,10 +788,13 @@ export const deleteCommentFromNotification = async (req, res, next) => {
 
     const updatedNotification = await getNotificationWithPopulates(notification._id);
 
-    emitNotificationEvent(req, "notification:comment_deleted", {
-      notificationId: notification._id,
-      comments: updatedNotification.comments,
-    });
+    // Fired when a comment is deleted (by owner, notification creator, or admin).
+    emitToRoles(
+      req,
+      "notification:comment_deleted",
+      { notificationId: notification._id, comments: updatedNotification.comments },
+      updatedNotification.targetRoles
+    );
 
     return res.status(200).json({
       success: true,
@@ -831,9 +886,13 @@ export const archiveNotification = async (req, res, next) => {
 
     const updatedNotification = await getNotificationWithPopulates(notification._id);
 
-    emitNotificationEvent(req, "notification:archived", {
-      notification: updatedNotification,
-    });
+    // Fired when a notification is archived — targeted clients should hide it live.
+    emitToRoles(
+      req,
+      "notification:archived",
+      { notification: updatedNotification },
+      updatedNotification.targetRoles
+    );
 
     return res.status(200).json({
       success: true,
@@ -871,9 +930,13 @@ export const publishNotification = async (req, res, next) => {
 
     const updatedNotification = await getNotificationWithPopulates(notification._id);
 
-    emitNotificationEvent(req, "notification:published", {
-      notification: updatedNotification,
-    });
+    // Fired when an archived notification is republished.
+    emitToRoles(
+      req,
+      "notification:published",
+      { notification: updatedNotification },
+      updatedNotification.targetRoles
+    );
 
     return res.status(200).json({
       success: true,
@@ -911,9 +974,13 @@ export const pinNotification = async (req, res, next) => {
 
     const updatedNotification = await getNotificationWithPopulates(notification._id);
 
-    emitNotificationEvent(req, "notification:pinned", {
-      notification: updatedNotification,
-    });
+    // Fired when a notification is pinned to the top of the feed.
+    emitToRoles(
+      req,
+      "notification:pinned",
+      { notification: updatedNotification },
+      updatedNotification.targetRoles
+    );
 
     return res.status(200).json({
       success: true,
@@ -951,9 +1018,13 @@ export const unpinNotification = async (req, res, next) => {
 
     const updatedNotification = await getNotificationWithPopulates(notification._id);
 
-    emitNotificationEvent(req, "notification:unpinned", {
-      notification: updatedNotification,
-    });
+    // Fired when a notification is unpinned.
+    emitToRoles(
+      req,
+      "notification:unpinned",
+      { notification: updatedNotification },
+      updatedNotification.targetRoles
+    );
 
     return res.status(200).json({
       success: true,

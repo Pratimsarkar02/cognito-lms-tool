@@ -94,6 +94,27 @@ httpServer.listen(port, () => {
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
 
+  socket.on('register-user', ({ userId, role }) => {
+  if (userId) {
+    socket.join(`user:${userId}`);
+  }
+
+  if (role) {
+    socket.join(`role:${role}`);
+  }
+
+  // Confirms server-side room join succeeded for this socket.
+  console.log(`[Server Socket] ${socket.id} joined rooms → user:${userId}, role:${role}`);
+});
+
+socket.on('unregister-user', ({ userId, role }) => {
+  if (userId) socket.leave(`user:${userId}`);
+  if (role) socket.leave(`role:${role}`);
+
+    // Confirms server-side room leave on logout/unmount.
+  console.log(`[Server Socket] ${socket.id} left rooms → user:${userId}, role:${role}`);
+});
+
   socket.on('join-exam-room', async (attemptId) => {
     console.log(`Socket ${socket.id} joining exam room: ${attemptId}`);
     try {
