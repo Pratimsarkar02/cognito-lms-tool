@@ -2,6 +2,9 @@ import streamifier from "streamifier";
 import multer from "multer";
 import Notification from "../models/notificationModel.js";
 import cloudinary from "../config/cloudinary.js";
+import userModel from "../models/userModel.js";
+import { buildNotificationPublishedEmail } from "../utils/emailTemplates.js";
+import { sendSystemEmail } from "../utils/emailService.js";
 
 const ALLOWED_REACTIONS = ["like", "support", "love", "insightful"];
 
@@ -188,6 +191,39 @@ const getNotificationWithPopulates = async (id) => {
     .lean();
 };
 
+const notifyRecipientsByEmail = async (notification, { isRepublish = false } = {}) => {
+  try {
+    const recipients = await userModel
+      .find({ role: { $in: notification.targetRoles } })
+      .select("firstName lastName email role");
+
+    if (!recipients.length) return;
+
+    await Promise.allSettled(
+      recipients
+        .filter((recipient) => recipient.email)
+        .map((recipient) => {
+          const emailPayload = buildNotificationPublishedEmail({
+            recipientName: `${recipient.firstName} ${recipient.lastName}`.trim(),
+            notification,
+            recipientRole: recipient.role,
+            isRepublish,
+          });
+
+          return sendSystemEmail({
+            to: recipient.email,
+            subject: emailPayload.subject,
+            html: emailPayload.html,
+            category: isRepublish ? "notification_republished" : "notification_published",
+          });
+        })
+    );
+  } catch (emailError) {
+    console.error("[Email] Notification email batch failed:", emailError.message);
+  }
+};
+
+
 export const createNotification = async (req, res) => {
   try {
     const user = req.user;
@@ -250,13 +286,17 @@ export const createNotification = async (req, res) => {
 
     const populatedNotification = await getNotificationWithPopulates(notification._id);
 
-    // Fired when a new notification is created — only targeted roles should receive this live.
     emitToRoles(
       req,
       "notification:created",
       { notification: populatedNotification },
       populatedNotification.targetRoles
     );
+
+    // Fire the email only when the notification is created already-published
+    if (populatedNotification.status === "published") {
+      notifyRecipientsByEmail(populatedNotification, { isRepublish: false });
+    }
 
     return res.status(201).json({
       success: true,
@@ -912,31 +952,31 @@ export const publishNotification = async (req, res, next) => {
     const notification = await Notification.findById(id);
 
     if (!notification || notification.deletedAt) {
-      return res.status(404).json({
-        success: false,
-        message: "Notification not found",
-      });
+      return res.status(404).json({ success: false, message: "Notification not found" });
     }
 
     if (!canManageNotification(user, notification)) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to publish this notification",
-      });
+      return res.status(403).json({ success: false, message: "Not authorized to publish this notification" });
     }
+
+    // Only a true archive -> published transition counts as a "republish"
+    const wasArchived = notification.status === "archived";
 
     notification.status = "published";
     await notification.save();
 
     const updatedNotification = await getNotificationWithPopulates(notification._id);
 
-    // Fired when an archived notification is republished.
     emitToRoles(
       req,
       "notification:published",
       { notification: updatedNotification },
       updatedNotification.targetRoles
     );
+
+    if (wasArchived) {
+      notifyRecipientsByEmail(updatedNotification, { isRepublish: true });
+    }
 
     return res.status(200).json({
       success: true,

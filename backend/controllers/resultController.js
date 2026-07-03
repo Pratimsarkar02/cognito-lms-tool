@@ -3,6 +3,12 @@ import Result from '../models/resultModel.js';
 import Exam from '../models/examModel.js';
 import ExamAttempt from '../models/examAttemptModel.js';
 import { Parser } from 'json2csv';
+import userModel from '../models/userModel.js';
+import {
+  buildResultsGeneratedEmail,
+  buildResultsPublishedEmail,
+} from '../utils/emailTemplates.js';
+import { sendSystemEmail } from '../utils/emailService.js';
 
 // ─── AUTH HELPER ─────────────────────────────────────────────────────────────
 const canManageExam = (exam, user) => {
@@ -20,8 +26,6 @@ const canManageExam = (exam, user) => {
 export const generateResults = async (req, res) => {
   try {
     const { examId } = req.params;
-    console.log(`[generateResults] examId=${examId} user=${req.user?.id} role=${req.user?.role}`);
-
     const exam = await Exam.findById(examId).lean();
     if (!exam) return res.status(404).json({ success: false, message: 'Exam not found' });
 
@@ -33,34 +37,24 @@ export const generateResults = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Results are already published. Unpublish first to re-generate.' });
     }
 
-    const completedAttempts = await ExamAttempt.find({ examId, isCompleted: true }).lean();
-    console.log(`[generateResults] Found ${completedAttempts.length} completed attempts`);
+    const isRegenerate = exam.resultsStatus === 'generated';
 
+    const completedAttempts = await ExamAttempt.find({ examId, isCompleted: true }).lean();
     if (completedAttempts.length === 0) {
       return res.status(400).json({ success: false, message: 'No completed exam attempts found for this exam.' });
     }
 
-    // Get unique student IDs
     const studentIds = [...new Set(completedAttempts.map(a => a.studentId.toString()))];
-    console.log(`[generateResults] Unique students: ${studentIds.length}`);
 
     const generated = await Promise.all(
       studentIds.map(async (studentIdStr) => {
         try {
-          const attempts = await ExamAttempt.find({
-            examId,
-            studentId: studentIdStr,
-            isCompleted: true,
-          }).lean();
-
+          const attempts = await ExamAttempt.find({ examId, studentId: studentIdStr, isCompleted: true }).lean();
           if (!attempts.length) return null;
 
-          // Find best attempt by marks obtained
           let bestAttempt = attempts[0];
           for (const attempt of attempts) {
-            if ((attempt.marksObtained || 0) > (bestAttempt.marksObtained || 0)) {
-              bestAttempt = attempt;
-            }
+            if ((attempt.marksObtained || 0) > (bestAttempt.marksObtained || 0)) bestAttempt = attempt;
           }
 
           const totalMarks = exam.totalMarks || 0;
@@ -76,19 +70,9 @@ export const generateResults = async (req, res) => {
             timestamp: a.createdAt,
           }));
 
-          // Upsert: create or update the result document
           return await Result.findOneAndUpdate(
             { examId, studentId: studentIdStr },
-            {
-              examId,
-              studentId: studentIdStr,
-              marksObtained,
-              totalMarks,
-              percentage,
-              isPassed,
-              bestAttemptId: bestAttempt._id,
-              allAttempts: allAttemptsData,
-            },
+            { examId, studentId: studentIdStr, marksObtained, totalMarks, percentage, isPassed, bestAttemptId: bestAttempt._id, allAttempts: allAttemptsData },
             { upsert: true, new: true, setDefaultsOnInsert: true }
           );
         } catch (err) {
@@ -101,7 +85,27 @@ export const generateResults = async (req, res) => {
     const validResults = generated.filter(Boolean);
     await Exam.findByIdAndUpdate(examId, { resultsStatus: 'generated' });
 
-    console.log(`[generateResults] Generated ${validResults.length} results, status → generated`);
+    try {
+      const creator = await userModel.findById(req.user.id).select('firstName lastName email');
+      if (creator?.email) {
+        const emailPayload = buildResultsGeneratedEmail({
+          creatorName: `${creator.firstName} ${creator.lastName}`.trim(),
+          examTitle: exam.title,
+          studentCount: validResults.length,
+          isRegenerate,
+        });
+
+        await sendSystemEmail({
+          to: creator.email,
+          subject: emailPayload.subject,
+          html: emailPayload.html,
+          category: isRegenerate ? 'results_regenerated' : 'results_generated',
+        });
+      }
+    } catch (emailError) {
+      console.error('[Email] Results generated email failed:', emailError.message);
+    }
+
     res.status(200).json({
       success: true,
       message: `Results generated for ${validResults.length} student(s). Review and publish when ready.`,
@@ -119,8 +123,6 @@ export const generateResults = async (req, res) => {
 export const publishResults = async (req, res) => {
   try {
     const { examId } = req.params;
-    console.log(`[publishResults] examId=${examId} user=${req.user?.id}`);
-
     const exam = await Exam.findById(examId);
     if (!exam) return res.status(404).json({ success: false, message: 'Exam not found' });
 
@@ -135,6 +137,38 @@ export const publishResults = async (req, res) => {
     }
 
     await Exam.findByIdAndUpdate(examId, { resultsStatus: 'published' });
+
+    // Fire per-student result emails on the transition into "published"
+    try {
+      const results = await Result.find({ examId })
+        .populate({ path: 'studentId', select: 'firstName lastName email', model: 'user-details' })
+        .lean();
+
+      await Promise.allSettled(
+        results
+          .filter((r) => r.studentId?.email)
+          .map((r) => {
+            const emailPayload = buildResultsPublishedEmail({
+              recipientName: `${r.studentId.firstName} ${r.studentId.lastName}`.trim(),
+              examTitle: exam.title,
+              totalMarks: r.totalMarks,
+              percentage: Number((r.percentage || 0).toFixed(2)),
+              marksObtained: r.marksObtained,
+              isPassed: r.isPassed,
+            });
+
+            return sendSystemEmail({
+              to: r.studentId.email,
+              subject: emailPayload.subject,
+              html: emailPayload.html,
+              category: 'results_published',
+            });
+          })
+      );
+    } catch (emailError) {
+      console.error('[Email] Results published email batch failed:', emailError.message);
+    }
+
     res.status(200).json({ success: true, message: 'Results published. Students can now view their scores.' });
   } catch (error) {
     console.error('[publishResults] Error:', error.message);

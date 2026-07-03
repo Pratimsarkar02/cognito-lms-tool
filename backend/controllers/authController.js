@@ -2,8 +2,12 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import userModel from '../models/userModel.js';
-import transporter from '../config/nodemailer.js';
-
+import {
+  buildWelcomeEmail,
+  buildVerifyOtpEmail,
+  buildResetOtpEmail,
+} from "../utils/emailTemplates.js";
+import { sendSystemEmail } from "../utils/emailService.js";
 // Register a new user
 export const register = async (req, res) => {
     const { firstName, lastName, email, password, role } = req.body;
@@ -40,41 +44,18 @@ export const register = async (req, res) => {
             sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
             maxAge: 7 * 24 * 60 * 60 * 1000
         });
-        //sending Welcome message upon user signing up 
-        const mailOptions = {
-            from: process.env.SENDER_MAIL,
-            to: email,
-            subject: "Welcome to COGNITO - Your Journey Starts Here!",
-            html: `        
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-          <h1 style="text-align: center; color: #4CAF50;">🎉 Welcome to COGNITO!</h1>
-          <p>Hi <strong>${firstName}</strong>,</p>
-          <p>We are thrilled to have you on board! 🚀 At <strong>COGNITO</strong>, we strive to empower learners like you with tools, resources, and a supportive community to help you achieve your goals.</p>
-          <p>Here are your Login Credentials: </p>
-            <ul>
-                <li><strong>Email:</strong> ${email}</li>
-                <li><strong>Password:</strong> ${password}</li>
-            </ul>
-          <p>Please make sure to keep your credentials safe and noted somewhere to ensure using COGNITO smooth and hassle-free.</p>
-          <p>Here is what you can do next to get started:</p>
-          <ol>
-            <li><strong>Complete Your Profile</strong>: Make the most of your experience by updating your profile <a href="#">here</a>.</li>
-            <li><strong>Explore Our Features</strong>: From personalized dashboards to insightful analytics, we've got you covered.</li>
-            <li><strong>Stay Connected</strong>: Join our active forums and connect with like-minded peers.</li>
-          </ol>
-          <a href="#" style="display: inline-block; margin: 20px 0; padding: 10px 20px; color: #fff; background-color: #4CAF50; text-decoration: none; border-radius: 5px;">Explore COGNITO Now</a>
-          <p>If you have any questions, feel free to reach out to our support team at <a href="mailto:help.cognito@gmail.com">help.cognito@gmail.com</a>.</p>
-          <p>Let's make great things happen together!</p>
-          <p>Best regards,</p>
-          <p>The <strong>COGNITO Team</strong></p>
-          <hr />
-          <p style="font-size: 0.9em; text-align: center; color: #555;">Follow us on <a href="#">LinkedIn</a> | <a href="#">Twitter</a> | <a href="#">Facebook</a></p>
-          <p style="font-size: 0.9em; text-align: center; color: #999;">© 2025 COGNITO. All Rights Reserved.</p>
-        </div>
-        `
-        }
+       const welcomeEmail = buildWelcomeEmail({
+  firstName,
+  email,
+  role,
+});
 
-        await transporter.sendMail(mailOptions);
+await sendSystemEmail({
+  to: email,
+  subject: welcomeEmail.subject,
+  html: welcomeEmail.html,
+  category: "auth_welcome",
+});
 
 
         return res.status(200).json({success: true, message: "User Signed Up Successfully"});
@@ -176,29 +157,17 @@ export const sendVerifyOtp = async (req, res) => {
         //Saving the user
         await user.save();
 
-        //Sending the OTP in Email
-        const mailOptions = {
-            from: process.env.SENDER_MAIL,
-            to: user.email,
-            subject: "Verify Your Email Address",
-            html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-            <h1 style="text-align: center; color: #4CAF50;">Verify Your Email Address</h1>
-            <p>Hi <strong>${user.firstName}</strong>,</p>
-            <p>Thank you for signing up with COGNITO! 🚀</p>
-            <p>Here is your OTP to verify your email address: <strong>${otp}</strong></p>
-            <p>Please enter this OTP in the verification field to complete the verification process.</p>
-            <p>If you have any questions, feel free to reach out to our support team at <a href="mailto:help.cognito@gmail.com">help.cognito@gmail.com</a>.</p>
-            <p>Best regards,</p>
-            <p>The <strong>COGNITO Team</strong></p>
-            <hr />
-            <p style="font-size: 0.9em; text-align: center; color: #555;">Follow us on <a href="#">LinkedIn</a> | <a href="#">Twitter</a> | <a href="#">Facebook</a></p>
-            <p style="font-size: 0.9em; text-align: center; color: #999;">© 2025 COGNITO. All Rights Reserved.</p>
-            </div>
-            `
-        };
+        const verifyEmail = buildVerifyOtpEmail({
+  firstName: user.firstName,
+  otp,
+});
 
-        await transporter.sendMail(mailOptions);
+await sendSystemEmail({
+  to: user.email,
+  subject: verifyEmail.subject,
+  html: verifyEmail.html,
+  category: "auth_verify_otp",
+});
 
         return res.json({success: true, message: "OTP sent successfully"});
 
@@ -282,30 +251,17 @@ export const sendResetOtp = async (req, res) => {
         //Saving the user
         await user.save();
 
-        //Sending the OTP in Email
-        const mailOptions = {
-            from: process.env.SENDER_MAIL,
-            to: user.email,
-            subject: "Reset Your Password",
-            html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-            <h1 style="text-align: center; color: #4CAF50;">Reset Your Password</h1>
-            <p>Hi <strong>${user.firstName}</strong>,</p>
-            <p>We received a request to reset your password. Please use the following OTP to reset your password.</p>
-            <p>Here is your OTP: <strong>${otp}</strong></p>
-            <p>Please enter this OTP in the reset password field to complete the process.</p>
-            <p>If you did not request a password reset, please ignore this email.</p>
-            <p>If you have any questions, feel free to reach out to our support team at <a href="mailto:help.cognito@gmail.com">help.cognito@gmail.com</a>.</p>
-            <p>Best regards,</p>
-            <p>The <strong>COGNITO Team</strong></p>
-            <hr />
-            <p style="font-size: 0.9em; text-align: center; color: #555;">Follow us on <a href="#">LinkedIn</a> | <a href="#">Twitter</a> | <a href="#">Facebook</a></p>
-            <p style="font-size: 0.9em; text-align: center; color: #999;">© 2025 COGNITO. All Rights Reserved.</p>
-            </div>
-            `
-        };
+        const resetEmail = buildResetOtpEmail({
+  firstName: user.firstName,
+  otp,
+});
 
-        await transporter.sendMail(mailOptions);
+await sendSystemEmail({
+  to: user.email,
+  subject: resetEmail.subject,
+  html: resetEmail.html,
+  category: "auth_reset_otp",
+});
 
         return res.json({success: true, message: "OTP sent successfully"});
 
