@@ -30,7 +30,7 @@ COGNITO is a **Student Learning Management System (LMS)** built using the **MERN
 ```sh
 # Clone the repo
 git clone https://github.com/Pratimsarkar02/cognito-lms-tool.git
-cd lms-app
+cd cognito-lms-tool
 ```
 
 ### **2️⃣ Setup the Backend**
@@ -90,6 +90,7 @@ Frontend will start on `http://localhost:5173`
 lms-app
 ├─ backend
 │  ├─ config
+│  │  ├─ cloudinary.js
 │  │  ├─ mongodb.js
 │  │  └─ nodemailer.js
 │  ├─ controllers
@@ -98,6 +99,7 @@ lms-app
 │  │  ├─ examController.js
 │  │  ├─ examLogController.js
 │  │  ├─ exportController.js
+│  │  ├─ notificationController.js
 │  │  ├─ questionController.js
 │  │  ├─ responseController.js
 │  │  ├─ resultController.js
@@ -109,6 +111,7 @@ lms-app
 │  │  ├─ questionValidation.js
 │  │  ├─ roleMiddleware.js
 │  │  ├─ timeoutMiddleware.js
+│  │  ├─ uploadMiddleware.js
 │  │  └─ userAuth.js
 │  ├─ models
 │  │  ├─ accomodationModel.js
@@ -130,13 +133,16 @@ lms-app
 │  │  ├─ authRoutes.js
 │  │  ├─ examLogRoutes.js
 │  │  ├─ examRoutes.js
+│  │  ├─ notificationRoutes.js
 │  │  ├─ questionRoutes.js
 │  │  ├─ responseRoutes.js
 │  │  ├─ resultRoutes.js
 │  │  └─ userRoutes.js
 │  ├─ server.js
 │  └─ utils
-│     └─ cleanup.js
+│     ├─ cleanup.js
+│     ├─ emailService.js
+│     └─ emailTemplates.js
 ├─ frontend
 │  ├─ eslint.config.js
 │  ├─ index.html
@@ -162,7 +168,8 @@ lms-app
 │  │  │  │  ├─ LoadingSkeleton.jsx
 │  │  │  │  ├─ Navbar.jsx
 │  │  │  │  ├─ Sidebar.jsx
-│  │  │  │  └─ Timer.jsx
+│  │  │  │  ├─ Timer.jsx
+│  │  │  │  └─ UserAvatar.jsx
 │  │  │  ├─ Features.tsx
 │  │  │  ├─ Footer.tsx
 │  │  │  ├─ Hero.tsx
@@ -178,37 +185,43 @@ lms-app
 │  │  ├─ lib
 │  │  │  └─ utils.js
 │  │  ├─ main.jsx
-│  │  └─ pages
-│  │     ├─ auth
-│  │     │  ├─ EmailVerify.jsx
-│  │     │  ├─ Login.jsx
-│  │     │  └─ ResetPassword.jsx
-│  │     ├─ dashboard
-│  │     │  ├─ AdminDashboard.jsx
-│  │     │  ├─ components
-│  │     │  │  ├─ CreateExam.jsx
-│  │     │  │  ├─ DashboardHome.jsx
-│  │     │  │  ├─ EditExam.jsx
-│  │     │  │  ├─ ExamDetails.jsx
-│  │     │  │  ├─ ExamInstructionsModal.jsx
-│  │     │  │  ├─ ExamInterface.jsx
-│  │     │  │  ├─ ExamList.jsx
-│  │     │  │  ├─ ExamResults.jsx
-│  │     │  │  ├─ ExamReview.jsx
-│  │     │  │  ├─ ManageQuestions.jsx
-│  │     │  │  ├─ QuestionEditor.jsx
-│  │     │  │  ├─ RoleEditor.jsx
-│  │     │  │  ├─ SettingsPage.jsx
-│  │     │  │  ├─ UserDetails.jsx
-│  │     │  │  ├─ UserManagement.jsx
-│  │     │  │  └─ UserProfile.jsx
-│  │     │  ├─ FacultyDashboard.jsx
-│  │     │  └─ StudentDashboard.jsx
-│  │     └─ landing
-│  │        ├─ About.jsx
-│  │        ├─ ContactUs.jsx
-│  │        └─ LandingPage.jsx
+│  │  ├─ pages
+│  │  │  ├─ auth
+│  │  │  │  ├─ EmailVerify.jsx
+│  │  │  │  ├─ Login.jsx
+│  │  │  │  └─ ResetPassword.jsx
+│  │  │  ├─ dashboard
+│  │  │  │  ├─ AdminDashboard.jsx
+│  │  │  │  ├─ components
+│  │  │  │  │  ├─ CreateExam.jsx
+│  │  │  │  │  ├─ DashboardHome.jsx
+│  │  │  │  │  ├─ EditExam.jsx
+│  │  │  │  │  ├─ ExamDetails.jsx
+│  │  │  │  │  ├─ ExamInstructionsModal.jsx
+│  │  │  │  │  ├─ ExamInterface.jsx
+│  │  │  │  │  ├─ ExamList.jsx
+│  │  │  │  │  ├─ ExamResults.jsx
+│  │  │  │  │  ├─ ExamReview.jsx
+│  │  │  │  │  ├─ ManageQuestions.jsx
+│  │  │  │  │  ├─ QuestionEditor.jsx
+│  │  │  │  │  ├─ Results
+│  │  │  │  │  │  ├─ AdminResults.jsx
+│  │  │  │  │  │  └─ FacultyResults.jsx
+│  │  │  │  │  ├─ SettingsPage.jsx
+│  │  │  │  │  ├─ UserDetails.jsx
+│  │  │  │  │  ├─ UserManagement.jsx
+│  │  │  │  │  └─ UserProfile.jsx
+│  │  │  │  ├─ FacultyDashboard.jsx
+│  │  │  │  └─ StudentDashboard.jsx
+│  │  │  └─ landing
+│  │  │     ├─ About.jsx
+│  │  │     ├─ ContactUs.jsx
+│  │  │     └─ LandingPage.jsx
+│  │  └─ utils
+│  │     └─ socket.js
 │  └─ vite.config.js
+├─ package-lock.json
+├─ package.json
 └─ README.md
 
 ```
