@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { toast } from "react-toastify";
 import {
@@ -12,8 +12,10 @@ import {
   X,
   FileText,
   Upload,
+  Pencil,
 } from "lucide-react";
 import { notificationService } from "../../../services/notificationService";
+import UserAvatar from "../UserAvatar";
 
 const ROLE_OPTIONS = ["Student", "Faculty", "Admin"];
 const CATEGORY_OPTIONS = [
@@ -24,6 +26,26 @@ const CATEGORY_OPTIONS = [
   { label: "General", value: "general" },
 ];
 
+const getDefaultForm = (userData, notification = null) => ({
+  title: notification?.title || "",
+  description: notification?.description || "",
+  category: notification?.category || "announcement",
+  targetRoles:
+    notification?.targetRoles?.length
+      ? notification.targetRoles
+      : userData?.role === "Admin"
+        ? ["Student", "Faculty"]
+        : ["Student"],
+  externalLink: notification?.externalLink || "",
+  eventDate: notification?.eventDate
+    ? new Date(new Date(notification.eventDate).getTime() - new Date(notification.eventDate).getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16)
+    : "",
+  isPinned: Boolean(notification?.isPinned),
+  status: notification?.status || "published",
+});
+
 const getFilePreviewType = (file) => {
   if (!file?.type) return "file";
   if (file.type.startsWith("image/")) return "image";
@@ -31,28 +53,31 @@ const getFilePreviewType = (file) => {
   return "file";
 };
 
-const NotificationComposer = ({ userData, onCreated }) => {
+const NotificationComposer = ({
+  userData,
+  onCreated,
+  onUpdated,
+  editingNotification,
+  onCancelEdit,
+}) => {
   const fileInputRef = useRef(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const isEditMode = Boolean(editingNotification);
+
+  const [isExpanded, setIsExpanded] = useState(isEditMode);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    category: "announcement",
-    targetRoles: userData?.role === "Admin" ? ["Student", "Faculty"] : ["Student"],
-    externalLink: "",
-    eventDate: "",
-    isPinned: false,
-    status: "published",
-  });
+  const [form, setForm] = useState(getDefaultForm(userData, editingNotification));
   const [files, setFiles] = useState([]);
   const [previewUrls, setPreviewUrls] = useState([]);
 
-  const initials = useMemo(() => {
-    const first = userData?.firstName?.[0] || "";
-    const last = userData?.lastName?.[0] || "";
-    return `${first}${last}`.toUpperCase() || "U";
-  }, [userData]);
+  useEffect(() => {
+    setForm(getDefaultForm(userData, editingNotification));
+    setFiles([]);
+    setPreviewUrls([]);
+    setIsExpanded(Boolean(editingNotification));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, [userData, editingNotification]);
 
   useEffect(() => {
     return () => {
@@ -67,16 +92,7 @@ const NotificationComposer = ({ userData, onCreated }) => {
       if (item.url) URL.revokeObjectURL(item.url);
     });
 
-    setForm({
-      title: "",
-      description: "",
-      category: "announcement",
-      targetRoles: userData?.role === "Admin" ? ["Student", "Faculty"] : ["Student"],
-      externalLink: "",
-      eventDate: "",
-      isPinned: false,
-      status: "published",
-    });
+    setForm(getDefaultForm(userData, null));
     setFiles([]);
     setPreviewUrls([]);
     setIsExpanded(false);
@@ -144,6 +160,9 @@ const NotificationComposer = ({ userData, onCreated }) => {
     setPreviewUrls(nextPreviewUrls);
   };
 
+  const isSubmitDisabled =
+    isSubmitting || !form.title.trim() || !form.description.trim() || !form.targetRoles.length;
+
   const handleSubmit = async (event) => {
     event.preventDefault();
 
@@ -174,12 +193,23 @@ const NotificationComposer = ({ userData, onCreated }) => {
         payload.append("attachments", file);
       });
 
-      const response = await notificationService.createNotification(payload);
-      toast.success(response?.message || "Notification posted");
-      onCreated?.(response.notification);
+      if (isEditMode) {
+        const response = await notificationService.updateNotification(editingNotification._id, payload);
+        toast.success(response?.message || "Notification updated");
+        onUpdated?.(response.notification);
+      } else {
+        const response = await notificationService.createNotification(payload);
+        toast.success(response?.message || "Notification posted");
+        onCreated?.(response.notification);
+      }
+
       resetComposer();
+      onCancelEdit?.();
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to publish notification");
+      toast.error(
+        error?.response?.data?.message ||
+          (isEditMode ? "Failed to update notification" : "Failed to publish notification")
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -189,9 +219,11 @@ const NotificationComposer = ({ userData, onCreated }) => {
     <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
       <form onSubmit={handleSubmit} className="p-4 sm:p-5">
         <div className="flex items-start gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cyan-600 to-teal-500 text-sm font-semibold text-white shadow-sm">
-            {initials}
-          </div>
+          <UserAvatar
+            firstName={userData?.firstName}
+            lastName={userData?.lastName}
+            size="md"
+          />
 
           <div className="min-w-0 flex-1">
             <button
@@ -199,7 +231,9 @@ const NotificationComposer = ({ userData, onCreated }) => {
               onClick={() => setIsExpanded(true)}
               className="flex min-h-[52px] w-full items-center cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 px-4 text-left text-sm text-slate-500 transition hover:border-cyan-300 hover:bg-cyan-50/50"
             >
-              Share an announcement, update, exam note, or event...
+              {isEditMode
+                ? "Update this notification using the existing fields..."
+                : "Share an announcement, update, exam note, or event..."}
             </button>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -223,6 +257,13 @@ const NotificationComposer = ({ userData, onCreated }) => {
                 <ShieldCheck size={16} />
                 Audience
               </button>
+
+              {isEditMode && (
+                <div className="inline-flex items-center gap-2 rounded-full bg-cyan-50 px-3 py-2 text-sm font-medium text-cyan-700">
+                  <Pencil size={15} />
+                  Editing mode
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -251,7 +292,7 @@ const NotificationComposer = ({ userData, onCreated }) => {
 
             <div className="grid gap-3 md:grid-cols-2">
               <div>
-                <label className="mb-2 block text-xs  font-semibold uppercase tracking-wide text-slate-500">
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Category
                 </label>
                 <select
@@ -443,7 +484,10 @@ const NotificationComposer = ({ userData, onCreated }) => {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={resetComposer}
+                  onClick={() => {
+                    resetComposer();
+                    onCancelEdit?.();
+                  }}
                   className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium cursor-pointer text-slate-600 transition hover:bg-white"
                 >
                   Cancel
@@ -451,10 +495,16 @@ const NotificationComposer = ({ userData, onCreated }) => {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitDisabled}
                   className="inline-flex items-center gap-2 rounded-full cursor-pointer bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isSubmitting ? "Posting..." : "Post notification"}
+                  {isSubmitting
+                    ? isEditMode
+                      ? "Saving..."
+                      : "Posting..."
+                    : isEditMode
+                      ? "Save changes"
+                      : "Post notification"}
                   <Send size={16} />
                 </button>
               </div>
@@ -469,6 +519,9 @@ const NotificationComposer = ({ userData, onCreated }) => {
 NotificationComposer.propTypes = {
   userData: PropTypes.object,
   onCreated: PropTypes.func,
+  onUpdated: PropTypes.func,
+  editingNotification: PropTypes.object,
+  onCancelEdit: PropTypes.func,
 };
 
 export default NotificationComposer;

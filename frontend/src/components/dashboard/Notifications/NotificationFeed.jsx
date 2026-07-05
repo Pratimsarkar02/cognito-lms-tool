@@ -32,6 +32,7 @@ const NotificationFeed = () => {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [filters, setFilters] = useState(FILTER_DEFAULTS);
+  const [editingNotification, setEditingNotification] = useState(null);
 
   const currentUserId = userData?._id || userData?.id;
   const canCompose = ["Admin", "Faculty"].includes(userData?.role);
@@ -166,11 +167,7 @@ const NotificationFeed = () => {
 
   const handleUpdateComment = async (notificationId, commentId, text) => {
     try {
-      const response = await notificationService.updateComment(
-        notificationId,
-        commentId,
-        text
-      );
+      const response = await notificationService.updateComment(notificationId, commentId, text);
       setNotifications((prev) => upsertNotification(prev, response.notification));
     } catch (error) {
       toast.error(error?.response?.data?.message || "Could not update comment");
@@ -194,7 +191,6 @@ const NotificationFeed = () => {
         filters.category === "all" || notification.category === filters.category;
 
       const matchesPinned = !filters.pinnedOnly || notification.isPinned;
-
       const matchesEvent = !filters.hasEvent || Boolean(notification.eventDate);
 
       const query = filters.search.trim().toLowerCase();
@@ -251,11 +247,13 @@ const NotificationFeed = () => {
             notification={notification}
             currentUserId={currentUserId}
             currentUserRole={userData?.role}
+            currentUser={userData}
             onReact={handleReact}
             onRemoveReaction={handleRemoveReaction}
             onAddComment={handleAddComment}
             onUpdateComment={handleUpdateComment}
             onDeleteComment={handleDeleteComment}
+            onEditRequested={setEditingNotification}
             onUpdated={(updatedNotification) =>
               setNotifications((prev) => upsertNotification(prev, updatedNotification))
             }
@@ -266,13 +264,7 @@ const NotificationFeed = () => {
         ))}
       </div>
     );
-  }, [
-    loading,
-    fetchError,
-    filteredNotifications,
-    currentUserId,
-    userData?.role,
-  ]);
+  }, [loading, fetchError, filteredNotifications, currentUserId, userData]);
 
   return (
     <section className="space-y-5">
@@ -281,9 +273,15 @@ const NotificationFeed = () => {
       {canCompose && (
         <NotificationComposer
           userData={userData}
+          editingNotification={editingNotification}
+          onCancelEdit={() => setEditingNotification(null)}
           onCreated={(notification) =>
             setNotifications((prev) => upsertNotification(prev, notification))
           }
+          onUpdated={(updatedNotification) => {
+            setNotifications((prev) => upsertNotification(prev, updatedNotification));
+            setEditingNotification(null);
+          }}
         />
       )}
 
