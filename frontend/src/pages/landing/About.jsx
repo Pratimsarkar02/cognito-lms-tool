@@ -1,78 +1,123 @@
-import React from 'react'
-import { Rocket, Heart, Target } from 'lucide-react';
-import Navbar from '../../components/Navbar';
-import Footer from '../../components/Footer';
+import { GraduationCap, Heart, Rocket, Target } from "lucide-react";
+import Navbar from "../../components/Navbar";
+import Footer from "../../components/Footer";
 
+const coreValues = [
+  {
+    icon: Rocket,
+    title: "Innovation",
+    description:
+      "Continuously improving how learning, exams, and academic coordination work together.",
+    accent: "text-cyan-700 bg-cyan-100",
+  },
+  {
+    icon: Heart,
+    title: "Empathy",
+    description:
+      "Designed around the real needs of students, faculty, and academic staff.",
+    accent: "text-rose-700 bg-rose-100",
+  },
+  {
+    icon: Target,
+    title: "Excellence",
+    description:
+      "Maintaining reliability and clarity across every academic workflow we support.",
+    accent: "text-emerald-700 bg-emerald-100",
+  },
+];
 
 const About = () => {
   return (
-    <div>
-    <div className="py-20 px-6 md:px-12">
+    <div className="min-h-screen bg-white">
       <Navbar />
-      <div className="max-w-7xl mx-auto space-y-20">
-        {/* Hero Section */}
-          <div className="text-center mb-16">
-            <br />
-            <h1 className="text-4xl md:text-5xl font-bold mb-6">About Cognito</h1>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Empowering minds through innovative learning solutions. We&#39;re on a mission
-              to make quality education accessible to everyone, everywhere.
+
+      <section className="relative overflow-hidden bg-slate-950 pt-[76px] text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(45,212,191,0.16),_transparent_30%)]" />
+
+        <div className="relative mx-auto max-w-5xl px-6 py-20 text-center lg:px-8">
+          <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
+            <GraduationCap className="h-4 w-4" />
+            About Cognito
+          </div>
+
+          <h1 className="mt-6 text-4xl font-bold tracking-tight sm:text-5xl">
+            Building a more connected academic experience.
+          </h1>
+
+          <p className="mx-auto mt-5 max-w-3xl text-base leading-8 text-slate-300 sm:text-lg">
+            Cognito brings learning, exams, and academic communication into one
+            focused platform, so students and faculty spend less time switching
+            tools and more time on what matters.
+          </p>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-6 py-20 lg:px-8">
+        <div className="grid gap-10 md:grid-cols-2">
+          <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-8">
+            <h2 className="text-2xl font-bold text-slate-950">Our Mission</h2>
+            <p className="mt-4 text-sm leading-7 text-slate-600">
+              To simplify academic life by unifying course access, exam workflows,
+              and communication into one clear, dependable experience for every
+              role on campus.
             </p>
           </div>
 
-        {/* Mission & Vision */}
-          <div className="grid md:grid-cols-2 gap-12">
-            <div className="space-y-4">
-              <h2 className="text-3xl font-bold">Our Mission</h2>
-              <p className="text-gray-600">
-                To revolutionize education by providing accessible, high-quality
-                learning experiences that empower individuals to achieve their full
-                potential and contribute meaningfully to society.
-              </p>
-            </div>
-            <div className="space-y-4">
-              <h2 className="text-3xl font-bold">Our Vision</h2>
-              <p className="text-gray-600">
-                To create a world where quality education knows no boundaries,
-                enabling lifelong learning and personal growth for everyone,
-                regardless of their background or circumstances.
-              </p>
-            </div>
+          <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-8">
+            <h2 className="text-2xl font-bold text-slate-950">Our Vision</h2>
+            <p className="mt-4 text-sm leading-7 text-slate-600">
+              A campus environment where learning tools, academic updates, and
+              coordination work seamlessly together, supporting students and
+              faculty without unnecessary friction.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-slate-50 px-6 py-20 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="text-center">
+            <h2 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+              Our core values
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
+              These principles guide how Cognito is designed, built, and improved
+              over time.
+            </p>
           </div>
 
-        {/* Core Values */}
-          <div className="space-y-8">
-            <h2 className="text-3xl font-bold text-center">Our Core Values</h2>
-            <div className="grid md:grid-cols-3 gap-8">
-              <div className="text-center p-6 rounded-lg bg-gray-50">
-                <Rocket className="w-12 h-12 mx-auto mb-4 text-emerald-600" />
-                <h3 className="text-xl font-bold mb-2">Innovation</h3>
-                <p className="text-gray-600">
-                  Continuously pushing boundaries to create better learning experiences
-                </p>
-              </div>
-              <div className="text-center p-6 rounded-lg bg-gray-50">
-                <Heart className="w-12 h-12 mx-auto mb-4 text-emerald-600" />
-                <h3 className="text-xl font-bold mb-2">Empathy</h3>
-                <p className="text-gray-600">
-                  Understanding and addressing the unique needs of every learner
-                </p>
-              </div>
-              <div className="text-center p-6 rounded-lg bg-gray-50">
-                <Target className="w-12 h-12 mx-auto mb-4 text-emerald-600" />
-                <h3 className="text-xl font-bold mb-2">Excellence</h3>
-                <p className="text-gray-600">
-                  Maintaining the highest standards in education and service
-                </p>
-              </div>
-            </div>
-          </div>
-      </div>
-      
-    </div>
-    <Footer />
-    </div>
-  )
-}
+          <div className="mt-12 grid gap-6 md:grid-cols-3">
+            {coreValues.map((value) => {
+              const Icon = value.icon;
 
-export default About
+              return (
+                <div
+                  key={value.title}
+                  className="rounded-[28px] border border-slate-200 bg-white p-8 text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+                >
+                  <div
+                    className={`mx-auto flex h-14 w-14 items-center justify-center rounded-2xl ${value.accent}`}
+                  >
+                    <Icon className="h-6 w-6" />
+                  </div>
+
+                  <h3 className="mt-6 text-xl font-semibold text-slate-900">
+                    {value.title}
+                  </h3>
+
+                  <p className="mt-3 text-sm leading-7 text-slate-600">
+                    {value.description}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <Footer />
+    </div>
+  );
+};
+
+export default About;

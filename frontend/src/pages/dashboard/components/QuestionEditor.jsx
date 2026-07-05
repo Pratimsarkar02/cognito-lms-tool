@@ -21,6 +21,17 @@ import {
   Maximize2
 } from 'lucide-react';
 
+  // React Quill configuration
+  const quillModules = {
+    toolbar: [
+      [{ 'header': [3, false] }],
+      ['bold', 'italic', 'underline'],
+      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+      ['link'],
+      ['clean']
+    ]
+  };
+  
 const QuestionEditor = ({ initialQuestions = null }) => {
   const { examId } = useParams();
   const navigate = useNavigate();
@@ -42,17 +53,6 @@ const QuestionEditor = ({ initialQuestions = null }) => {
     ],
     marks: 1,
     explanation: ''
-  };
-
-  // React Quill configuration
-  const quillModules = {
-    toolbar: [
-      [{ 'header': [3, false] }],
-      ['bold', 'italic', 'underline'],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      ['link'],
-      ['clean']
-    ]
   };
 
   // Load exam details and existing questions
@@ -505,13 +505,18 @@ const QuestionEditor = ({ initialQuestions = null }) => {
                           Question Text
                         </label>
                         <ReactQuill
-                          theme="snow"
-                          value={question.questionText}
-                          onChange={(content) => updateQuestion(qIndex, 'questionText', content)}
-                          modules={quillModules}
-                          placeholder="Enter your question here..."
-                          style={{ height: '120px', marginBottom: '42px' }}
-                        />
+  theme="snow"
+  value={question.questionText}
+  onChange={(content, delta, source) => {
+    // Only update state if the user actually typed/modified it
+    if (source === 'user') {
+      updateQuestion(qIndex, 'questionText', content);
+    }
+  }}
+  modules={quillModules}
+  placeholder="Enter your question here..."
+  style={{ height: '120px', marginBottom: '42px' }}
+/>
                       </div>
 
                       {/* Options */}
@@ -564,13 +569,18 @@ const QuestionEditor = ({ initialQuestions = null }) => {
                           Explanation (Optional)
                         </label>
                         <ReactQuill
-                          theme="snow"
-                          value={question.explanation || ''}
-                          onChange={(content) => updateQuestion(qIndex, 'explanation', content || '')}
-                          modules={quillModules}
-                          placeholder="Add explanation for the correct answer..."
-                          style={{ height: '100px', marginBottom: '42px' }}
-                        />
+  theme="snow"
+  value={question.explanation || ''}
+  onChange={(content, delta, source) => {
+    // Only update state if the user actually typed/modified it
+    if (source === 'user') {
+      updateQuestion(qIndex, 'explanation', content || '');
+    }
+  }}
+  modules={quillModules}
+  placeholder="Add explanation for the correct answer..."
+  style={{ height: '100px', marginBottom: '42px' }}
+/>
                       </div>
                     </div>
                   )}

@@ -1,10 +1,9 @@
-// Updated AppContext.jsx
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { AppContent } from "./AppContext";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { initSocket, getSocket } from "../utils/socket";
+import { initSocket } from "../utils/socket";
 
 axios.defaults.withCredentials = true;
 
@@ -17,28 +16,33 @@ export const AppContextProvider = ({ children }) => {
   });
 
   const backendUrl = import.meta.env.VITE_BACKEND_URL;
+  const registeredUserRef = useRef(null);
 
   const checkAuthState = useCallback(async () => {
     try {
       const { data } = await axios.get(`${backendUrl}/api/auth/is-auth`);
+
       if (data.success) {
         const userRes = await axios.get(`${backendUrl}/api/user/data`);
+        const nextUser = userRes.data.userData || null;
+
         setAuthState({
           isLoggedIn: true,
           isLoading: false,
-          userData: userRes.data.userData,
+          userData: nextUser,
         });
-        if (userRes.data.userData) {
-          setUserData(userRes.data.userData);
-          console.log("User Data:", userRes.data.userData);
+        setUserData(nextUser);
+
+        if (nextUser) {
+          console.log("User Data:", nextUser);
         }
       } else {
-        setAuthState((prev) => ({
-          ...prev,
-          isLoading: false,
+        setAuthState({
           isLoggedIn: false,
+          isLoading: false,
           userData: null,
-        }));
+        });
+        setUserData(null);
       }
     } catch (error) {
       console.error("Auth check error:", error);
@@ -51,87 +55,122 @@ export const AppContextProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      const socket = initSocket(backendUrl);
+      const activeUser = registeredUserRef.current;
+
+      if (socket?.connected && activeUser?.userId && activeUser?.role) {
+        socket.emit("unregister-user", activeUser);
+        console.log("[Socket] Sent unregister-user payload:", activeUser);
+      }
+
+      if (socket?.connected) {
+        socket.disconnect();
+      }
+
+      registeredUserRef.current = null;
+
       await axios.post(`${backendUrl}/api/auth/logout`);
+
       setAuthState({
         isLoggedIn: false,
         isLoading: false,
         userData: null,
       });
+      setUserData(null);
+
       toast.success("Logged out successfully!");
     } catch (error) {
       toast.error(error.message || "Logout failed");
     }
   };
 
-  // Add refresh interval
   useEffect(() => {
     checkAuthState();
     const interval = setInterval(checkAuthState, 300000);
     return () => clearInterval(interval);
   }, [checkAuthState]);
 
-  // Socket.IO lifecycle — connects only when logged in, disconnects on logout/unmount.
   useEffect(() => {
+    const socket = initSocket(backendUrl);
+
     if (!authState.isLoggedIn || !userData) {
+      if (socket?.connected && registeredUserRef.current?.userId && registeredUserRef.current?.role) {
+        socket.emit("unregister-user", registeredUserRef.current);
+        console.log("[Socket] Sent unregister-user payload:", registeredUserRef.current);
+      }
+
+      registeredUserRef.current = null;
+
+      if (socket?.connected) {
+        socket.disconnect();
+      }
+
       return;
     }
 
-    const socket = initSocket(backendUrl);
     const userId = userData._id || userData.id;
     const role = userData.role;
 
-    socket.connect();
+    const registerPayload = { userId, role };
 
-    // Fired locally right after we tell the server which room to join.
-    socket.emit("register-user", { userId, role });
-    console.log("[Socket] Sent register-user payload:", { userId, role });
+    if (!socket.connected) {
+      socket.connect();
+    }
 
-    // --- Temporary diagnostic listeners (safe to remove once feed UI exists) ---
+    const alreadyRegistered =
+      registeredUserRef.current?.userId === userId &&
+      registeredUserRef.current?.role === role;
 
-    // Confirms a new notification reached this client in real time.
+    if (!alreadyRegistered) {
+      socket.emit("register-user", registerPayload);
+      console.log("[Socket] Sent register-user payload:", registerPayload);
+      registeredUserRef.current = registerPayload;
+    }
+
     const handleCreated = (payload) => {
       console.log("[Socket Event] notification:created received:", payload);
     };
 
-    // Confirms an existing notification update reached this client.
     const handleUpdated = (payload) => {
       console.log("[Socket Event] notification:updated received:", payload);
     };
 
-    // Confirms archive/publish/pin/unpin state changes reached this client.
     const handleArchived = (payload) => {
       console.log("[Socket Event] notification:archived received:", payload);
     };
+
     const handlePublished = (payload) => {
       console.log("[Socket Event] notification:published received:", payload);
     };
+
     const handlePinned = (payload) => {
       console.log("[Socket Event] notification:pinned received:", payload);
     };
+
     const handleUnpinned = (payload) => {
       console.log("[Socket Event] notification:unpinned received:", payload);
     };
 
-    // Confirms deletion event reached this client.
     const handleDeleted = (payload) => {
       console.log("[Socket Event] notification:deleted received:", payload);
     };
 
-    // Confirms reaction add/change/remove events reached this client.
     const handleReacted = (payload) => {
       console.log("[Socket Event] notification:reacted received:", payload);
     };
+
     const handleReactionRemoved = (payload) => {
       console.log("[Socket Event] notification:reaction_removed received:", payload);
     };
 
-    // Confirms comment add/edit/delete events reached this client.
     const handleCommentAdded = (payload) => {
       console.log("[Socket Event] notification:comment_added received:", payload);
     };
+
     const handleCommentUpdated = (payload) => {
       console.log("[Socket Event] notification:comment_updated received:", payload);
     };
+
     const handleCommentDeleted = (payload) => {
       console.log("[Socket Event] notification:comment_deleted received:", payload);
     };
@@ -150,10 +189,6 @@ export const AppContextProvider = ({ children }) => {
     socket.on("notification:comment_deleted", handleCommentDeleted);
 
     return () => {
-      // Fired locally right before we leave rooms and disconnect (logout or unmount).
-      socket.emit("unregister-user", { userId, role });
-      console.log("[Socket] Sent unregister-user payload:", { userId, role });
-
       socket.off("notification:created", handleCreated);
       socket.off("notification:updated", handleUpdated);
       socket.off("notification:archived", handleArchived);
@@ -166,20 +201,19 @@ export const AppContextProvider = ({ children }) => {
       socket.off("notification:comment_added", handleCommentAdded);
       socket.off("notification:comment_updated", handleCommentUpdated);
       socket.off("notification:comment_deleted", handleCommentDeleted);
-
-      socket.disconnect();
     };
   }, [authState.isLoggedIn, userData, backendUrl]);
 
   return (
     <AppContent.Provider
       value={{
-        userData,
         authState,
-        backendUrl,
-        logout,
+        setAuthState,
+        userData,
+        setUserData,
         checkAuthState,
-        getSocket,
+        logout,
+        backendUrl,
       }}
     >
       {children}

@@ -1,28 +1,32 @@
-import { useContext, useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { AppContent } from '../../../contexts/AppContext';
-import axios from 'axios';
-import { toast } from 'react-toastify';
-import { io } from 'socket.io-client';
+import { useContext, useEffect, useRef, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { AppContent } from "../../../contexts/AppContext";
+import axios from "axios";
+import { toast } from "react-toastify";
+import { getSocket } from "../../../utils/socket";
 
 const ExamReview = () => {
   const { examId } = useParams();
   const navigate = useNavigate();
   const { backendUrl } = useContext(AppContent);
+
   const [questions, setQuestions] = useState([]);
   const [remainingTime, setRemainingTime] = useState(0);
-  const [socket, setSocket] = useState(null);
   const [attemptId, setAttemptId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // Reference for the header element
+  const [responses, setResponses] = useState({});
+  const joinedAttemptRef = useRef(null);
   const headerRef = useRef(null);
 
-  // Get responses from localStorage
-  const [responses, setResponses] = useState({});
+  const getOptionLabel = (option) => {
+    if (typeof option === "string") return option;
+    if (option && typeof option === "object") {
+      return option.text || option.label || option.value || "";
+    }
+    return "";
+  };
 
   useEffect(() => {
-    // Load responses from localStorage
     const attemptData = localStorage.getItem(`examAttempt-${examId}`);
     if (attemptData) {
       const parsedData = JSON.parse(attemptData);
@@ -33,186 +37,138 @@ const ExamReview = () => {
     }
   }, [examId]);
 
-  // Separate handler for time expiration
-  const handleTimeExpired = async () => {
-    try {
-      // Get latest responses from localStorage
-      const savedData = localStorage.getItem(`examAttempt-${examId}`);
-      const currentResponses = savedData ? JSON.parse(savedData).responses : {};
-      
-      // Submit responses to backend
-      await axios.post(
-        `${backendUrl}/api/responses/${examId}/batch`,
-        { responses: currentResponses },
-        { withCredentials: true }
-      );
-      
-      // Clean up localStorage
-      localStorage.removeItem(`examAttempt-${examId}`);
-      
-      // Clean up socket
-      if (socket) {
-        socket.emit('leave-exam-room');
-        socket.disconnect();
-      }
-      
-      // Show feedback and redirect
-      toast.info('Exam time has expired. Your responses have been submitted.');
-      navigate('/student-dashboard/exams');
-    } catch (error) {
-      console.error('Auto-submission error:', error);
-      toast.error('Error submitting responses automatically. Please contact support.');
-      
-      // Even if submission fails, we should navigate away
-      navigate('/student-dashboard/exams');
-    }
-  };
-    
-useEffect(() => {
-  let socketInstance = null;
+  useEffect(() => {
+    let isMounted = true;
 
-  const initializeReview = async () => {
-    setIsLoading(true);
-    try {
-      // Check if we have an attemptId from localStorage first
-      let currentAttemptId = attemptId;
-      
-      if (!currentAttemptId) {
-        // If not, get attempt details from API
-        const { data } = await axios.get(
-          `${backendUrl}/api/exams/${examId}/attempt`,
-          { withCredentials: true }
+    const initializeReview = async () => {
+      setIsLoading(true);
+
+      try {
+        let currentAttemptId = attemptId;
+
+        if (!currentAttemptId) {
+          const { data } = await axios.get(`${backendUrl}/api/exams/${examId}/attempt`, {
+            withCredentials: true,
+          });
+          currentAttemptId = data.attempt._id;
+
+          if (!isMounted) return;
+          setAttemptId(currentAttemptId);
+        }
+
+        const socket = getSocket();
+        if (socket?.connected) {
+          socket.emit("join-exam-room", currentAttemptId);
+          joinedAttemptRef.current = currentAttemptId;
+          console.log("[ExamReview] Joined exam room:", currentAttemptId);
+        } else {
+          console.warn("[ExamReview] Shared socket not connected. Timer updates unavailable.");
+        }
+
+        const questionsRes = await axios.get(`${backendUrl}/api/questions/${examId}/questions`, {
+          withCredentials: true,
+        });
+
+        if (!isMounted) return;
+        setQuestions(questionsRes.data.questions || []);
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Failed to load review data:", error);
+        toast.error("Failed to load review data");
+        navigate("/student-dashboard/exams");
+      }
+    };
+
+    initializeReview();
+
+    return () => {
+      isMounted = false;
+      const socket = getSocket();
+      if (socket?.connected && joinedAttemptRef.current) {
+        socket.emit("leave-exam-room");
+        console.log("[ExamReview] Left exam room:", joinedAttemptRef.current);
+      }
+      joinedAttemptRef.current = null;
+    };
+  }, [examId, backendUrl, navigate, attemptId]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleTimerUpdate = (time) => {
+      setRemainingTime(time);
+    };
+
+    const handleTimeExpired = async () => {
+      console.log("=== AUTO-SUBMIT TRIGGERED ===");
+      try {
+        const savedData = localStorage.getItem(`examAttempt-${examId}`);
+        if (!savedData) {
+          toast.info("No responses to submit.");
+          navigate("/student-dashboard/exams");
+          return;
+        }
+
+        const parsedData = JSON.parse(savedData);
+        const currentResponses = parsedData.responses || {};
+
+        await axios.get(`${backendUrl}/api/user/data`, { withCredentials: true });
+
+        await axios.post(
+          `${backendUrl}/api/responses/${examId}/batch`,
+          { responses: currentResponses },
+          { withCredentials: true, timeout: 10000 }
         );
-        currentAttemptId = data.attempt._id;
-        setAttemptId(currentAttemptId);
+
+        localStorage.removeItem(`examAttempt-${examId}`);
+
+        if (socket?.connected && joinedAttemptRef.current) {
+          socket.emit("leave-exam-room");
+        }
+        joinedAttemptRef.current = null;
+
+        toast.success("Exam submitted successfully due to time expiry.");
+        navigate("/student-dashboard/exams");
+      } catch (error) {
+        console.error("=== AUTO-SUBMIT ERROR ===");
+        console.error("Error type:", error.name);
+        console.error("Error message:", error.message);
+        console.error("Response status:", error.response?.status);
+        console.error("Response data:", error.response?.data);
+
+        let errorMessage = "Error submitting responses automatically.";
+        if (error.code === "ECONNABORTED") {
+          errorMessage = "Submission timeout. Please check your connection.";
+        } else if (error.response?.status === 401) {
+          errorMessage = "Authentication failed. Please login again.";
+        } else if (error.response?.status === 404) {
+          errorMessage = "Exam not found.";
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message;
+        }
+
+        toast.error(errorMessage);
+        navigate("/student-dashboard/exams");
       }
+    };
 
-      // Initialize WebSocket
-      socketInstance = io(backendUrl);
-      
-      socketInstance.on('connect', () => {
-        console.log('Review page socket connected:', socketInstance.id);
-        socketInstance.emit('join-exam-room', currentAttemptId);
-      });
+    const handleExamError = (error) => {
+      console.error("Review page exam error:", error);
+      toast.error(error.message || "An error occurred with the exam");
+      navigate("/student-dashboard/exams");
+    };
 
-      socketInstance.on('timer-update', (time) => {
-        setRemainingTime(time);
-      });
+    socket.on("timer-update", handleTimerUpdate);
+    socket.on("time-expired", handleTimeExpired);
+    socket.on("exam-error", handleExamError);
 
-      // **FIX: Define handleTimeExpired inside useEffect to avoid stale closure**
-      const handleTimeExpired = async () => {
-  console.log('=== AUTO-SUBMIT TRIGGERED ===');
-  try {
-    // 1. Get and validate data
-    const savedData = localStorage.getItem(`examAttempt-${examId}`);
-    console.log('LocalStorage data:', savedData);
-    
-    if (!savedData) {
-      console.log('No saved data found');
-      toast.info('No responses to submit.');
-      navigate('/student-dashboard/exams');
-      return;
-    }
-
-    const parsedData = JSON.parse(savedData);
-    const currentResponses = parsedData.responses || {};
-    
-    console.log('Parsed responses:', currentResponses);
-    console.log('Number of responses:', Object.keys(currentResponses).length);
-
-    // 2. Check authentication
-    await axios.get(`${backendUrl}/api/user/data`, {
-      withCredentials: true
-    });
-
-    // 3. Submit responses
-    console.log('Submitting to:', `${backendUrl}/api/responses/${examId}/batch`);
-    
-    const response = await axios.post(
-      `${backendUrl}/api/responses/${examId}/batch`,
-      { responses: currentResponses },
-      { 
-        withCredentials: true,
-        timeout: 10000 // 10 second timeout
-      }
-    );
-
-    console.log('Submission response:', response.data);
-
-    // 4. Cleanup
-    localStorage.removeItem(`examAttempt-${examId}`);
-
-    if (socketInstance) {
-      socketInstance.emit('leave-exam-room');
-      socketInstance.disconnect();
-    }
-
-    toast.success('Exam submitted successfully due to time expiry.');
-    navigate('/student-dashboard/exams');
-
-  } catch (error) {
-    console.error('=== AUTO-SUBMIT ERROR ===');
-    console.error('Error type:', error.name);
-    console.error('Error message:', error.message);
-    console.error('Response status:', error.response?.status);
-    console.error('Response data:', error.response?.data);
-    console.error('Full error:', error);
-
-    // Specific error handling
-    let errorMessage = 'Error submitting responses automatically.';
-    
-    if (error.code === 'ECONNABORTED') {
-      errorMessage = 'Submission timeout. Please check your connection.';
-    } else if (error.response?.status === 401) {
-      errorMessage = 'Authentication failed. Please login again.';
-    } else if (error.response?.status === 404) {
-      errorMessage = 'Exam not found.';
-    } else if (error.response?.data?.message) {
-      errorMessage = error.response.data.message;
-    }
-
-    toast.error(errorMessage);
-    navigate('/student-dashboard/exams');
-  }
-};
-
-
-      socketInstance.on('time-expired', handleTimeExpired);
-
-      socketInstance.on('exam-error', (error) => {
-        console.error('Review page exam error:', error);
-        toast.error(error.message || 'An error occurred with the exam');
-        navigate('/student-dashboard/exams');
-      });
-
-      setSocket(socketInstance);
-
-      // Load questions
-      const questionsRes = await axios.get(
-        `${backendUrl}/api/questions/${examId}/questions`,
-        { withCredentials: true }
-      );
-      setQuestions(questionsRes.data.questions);
-
-      setIsLoading(false);
-    } catch (error) {
-      console.error('Failed to load review data:', error);
-      toast.error('Failed to load review data');
-      navigate('/student-dashboard/exams');
-    }
-  };
-
-  initializeReview();
-
-  return () => {
-    if (socketInstance) {
-      console.log('Cleaning up review page socket connection');
-      socketInstance.emit('leave-exam-room');
-      socketInstance.disconnect();
-    }
-  };
-}, [examId, backendUrl, navigate, attemptId]);
-
+    return () => {
+      socket.off("timer-update", handleTimerUpdate);
+      socket.off("time-expired", handleTimeExpired);
+      socket.off("exam-error", handleExamError);
+    };
+  }, [examId, backendUrl, navigate]);
 
   const handleFinalSubmit = async () => {
     try {
@@ -221,20 +177,19 @@ useEffect(() => {
         { responses },
         { withCredentials: true }
       );
-      
-      // Clean up localStorage
+
       localStorage.removeItem(`examAttempt-${examId}`);
-      
-      // Clean up socket
-      if (socket) {
-        socket.emit('leave-exam-room');
-        socket.disconnect();
+
+      const socket = getSocket();
+      if (socket?.connected && joinedAttemptRef.current) {
+        socket.emit("leave-exam-room");
       }
-      
-      toast.success('Exam submitted successfully!');
-      navigate('/student-dashboard/exams');
+      joinedAttemptRef.current = null;
+
+      toast.success("Exam submitted successfully!");
+      navigate("/student-dashboard/exams");
     } catch (error) {
-      toast.error('Submission failed: ' + (error.response?.data?.message || error.message));
+      toast.error("Submission failed: " + (error.response?.data?.message || error.message));
     }
   };
 
@@ -247,93 +202,163 @@ useEffect(() => {
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
   const getAnsweredCount = () => {
-    return Object.keys(responses).filter(key => responses[key]?.length > 0).length;
+    return Object.keys(responses).filter((key) => responses[key]?.length > 0).length;
   };
 
   if (isLoading) {
-    return <div className="p-6">Loading exam review...</div>;
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-teal-100 flex justify-center items-center">
+        <div className="bg-white rounded-2xl shadow-lg p-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto"></div>
+          <p className="text-gray-600 mt-4 text-center">Loading review...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="p-6">
-      {/* Spacer div that takes up same height as header when header becomes fixed */}
-      <div className="mb-6"></div> 
-      
-      {/* Header with exam info and timer */}
-      <div 
-        ref={headerRef}
-        className="relative bg-gray-800 text-white p-4 rounded-lg flex justify-between items-center mb-6 z-10 px-6"
-      >
-        <div>
-          <h1 className="text-2xl font-bold">Review Your Exam</h1>
-          <p className="text-gray-300">
-            {getAnsweredCount()} of {questions.length} questions answered
-          </p>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl">{formatTime(remainingTime)}</div>
-          <div className="text-sm">Hrs | Min | Sec</div>
-        </div>
-      </div>
-
-      {questions.map((question, index) => (
-        <div key={question._id} className="bg-white p-4 rounded shadow mb-4">
-          <h3 className="font-semibold mb-2">
-            <span>Q{index + 1}. </span>
-      <div 
-        className="inline"
-        dangerouslySetInnerHTML={{ 
-          __html: question.questionText || 'Question text not available' 
-        }}
-      />
-          </h3>
-          <div className="space-y-2">
-            {question.options.map((option, optIndex) => (
-              <div 
-                key={optIndex}
-                className={`p-2 rounded ${
-                  responses[question._id]?.includes(optIndex) 
-                    ? 'bg-blue-50 border border-blue-200' 
-                    : 'bg-gray-50'
-                }`}
-              >
-                <label className="flex items-center gap-2">
-                  <input
-                    type={question.questionType === 'msq' ? 'checkbox' : 'radio'}
-                    checked={responses[question._id]?.includes(optIndex)}
-                    disabled
-                    className="w-4 h-4"
-                  />
-                  <span>{option.text}</span>
-                </label>
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-teal-100">
+      <div className="container mx-auto px-4 py-6 max-w-6xl">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+          <div
+            ref={headerRef}
+            className="bg-gradient-to-r from-teal-600 to-green-600 text-white p-6 sticky top-0 z-10"
+          >
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+              <div>
+                <h1 className="text-2xl lg:text-3xl font-bold mb-2">Review Your Answers</h1>
+                <p className="text-teal-100">
+                  {getAnsweredCount()} of {questions.length} questions answered
+                </p>
               </div>
-            ))}
+
+              <div className="bg-white/20 backdrop-blur-sm rounded-xl px-6 py-3">
+                <div className="text-sm text-teal-100 mb-1">Time Remaining</div>
+                <div className="text-2xl font-bold font-mono">{formatTime(remainingTime)}</div>
+              </div>
+            </div>
           </div>
-          <div className="mt-2 text-sm text-gray-500">
-            {!responses[question._id] || responses[question._id].length === 0 
-              ? <span className="text-red-500">Not answered</span> 
-              : <span className="text-green-500">Answered</span>}
+
+          <div className="p-6 lg:p-8">
+            <div className="space-y-6">
+              {questions.map((question, questionIndex) => {
+                const selectedOptions = responses[question._id] || [];
+
+                return (
+                  <div
+                    key={question._id}
+                    className="bg-gray-50 rounded-2xl p-6 border border-gray-200 shadow-sm"
+                  >
+                    <div className="mb-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
+                        <span className="bg-teal-100 text-teal-700 px-3 py-1 rounded-full text-sm font-medium">
+                          Question {questionIndex + 1}
+                        </span>
+                        <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm">
+                          {question.questionType === "msq" ? "Multiple Select" : "Single Select"}
+                        </span>
+                      </div>
+
+                      <h3 className="text-lg lg:text-xl font-semibold text-gray-800 leading-relaxed">
+                        {question.questionText || question.question}
+                      </h3>
+                    </div>
+
+                    <div className="space-y-3">
+                      {(question.options || []).map((option, optionIndex) => {
+                        const isSelected = selectedOptions.includes(optionIndex);
+
+                        return (
+                          <div
+                            key={option?._id || optionIndex}
+                            className={`p-4 rounded-xl border-2 transition-all ${
+                              isSelected
+                                ? "border-teal-500 bg-teal-50 shadow-sm"
+                                : "border-gray-200 bg-white"
+                            }`}
+                          >
+                            <div className="flex items-start gap-4">
+                              <div
+  className={`flex-shrink-0 w-6 h-6 border-2 flex items-center justify-center mt-0.5 ${
+    question.questionType === "msq" ? "rounded-md" : "rounded-full"
+  } ${
+    isSelected
+      ? "border-teal-500 bg-teal-500"
+      : "border-gray-300 bg-white"
+  }`}
+>
+  {isSelected &&
+    (question.questionType === "msq" ? (
+      <svg
+        className="w-3.5 h-3.5 text-white"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+      >
+        <path
+          fillRule="evenodd"
+          d="M16.704 5.29a1 1 0 010 1.42l-7.2 7.2a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.42l2.293 2.294 6.493-6.494a1 1 0 011.414 0z"
+          clipRule="evenodd"
+        />
+      </svg>
+    ) : (
+      <div className="w-2 h-2 bg-white rounded-full"></div>
+    ))}
+</div>
+                              <span
+                                className={`leading-relaxed ${
+                                  isSelected ? "text-teal-800 font-medium" : "text-gray-700"
+                                }`}
+                              >
+                                {getOptionLabel(option)}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {selectedOptions.length === 0 && (
+                      <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                        <p className="text-amber-700 text-sm font-medium">
+                          No answer selected for this question
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-8 flex flex-col sm:flex-row justify-between items-center gap-4 pt-6 border-t border-gray-200">
+              <button
+                onClick={handleBackToExam}
+                className="px-8 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-all duration-200"
+              >
+                ← Back to Exam
+              </button>
+
+              <div className="flex items-center gap-4">
+                <div className="text-sm text-gray-600">
+                  Progress:{" "}
+                  <span className="font-semibold text-teal-600">
+                    {getAnsweredCount()}/{questions.length}
+                  </span>
+                </div>
+
+                <button
+                  onClick={handleFinalSubmit}
+                  className="px-8 py-3 bg-teal-600 text-white rounded-xl font-medium hover:bg-teal-700 transition-all duration-200 shadow-md hover:shadow-lg"
+                >
+                  Final Submit
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      ))}
-
-      <div className="flex gap-4 justify-end mt-6">
-        <button
-          onClick={handleBackToExam}
-          className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded cursor-pointer"
-        >
-          Back to Exam
-        </button>
-        <button
-          onClick={handleFinalSubmit}
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded cursor-pointer"
-        >
-          Final Submit
-        </button>
       </div>
     </div>
   );

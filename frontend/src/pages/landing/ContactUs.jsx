@@ -1,175 +1,206 @@
-import React, { useState } from 'react';
-import { Mail, Phone, MapPin, Send } from 'lucide-react';
-import Navbar from '../../components/Navbar';
-import Footer from '../../components/Footer';
+import { useState } from "react";
+import { Mail, MapPin, Phone, Send } from "lucide-react";
+import Navbar from "../../components/Navbar";
+import Footer from "../../components/Footer";
 
+const contactDetails = [
+  {
+    icon: Mail,
+    label: "Email",
+    value: "help.cognito@gmail.com",
+  },
+  {
+    icon: Phone,
+    label: "Phone",
+    value: "+91 99325-66274",
+  },
+  {
+    icon: MapPin,
+    label: "Address",
+    value: "Saltlake Sec-IV, Chingrighata, Kolkata, West Bengal, 700101, India",
+  },
+];
 
-const Contact = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    subject: '',
-    message: '',
-  });
-  const [status, setStatus] = useState('idle');
+const initialFormState = {
+  name: "",
+  email: "",
+  subject: "",
+  message: "",
+};
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setStatus('loading');
-    
-    // Simulate form submission
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setStatus('success');
-    setFormData({ name: '', email: '', subject: '', message: '' });
+const ContactUs = () => {
+  const [formData, setFormData] = useState(initialFormState);
+  const [status, setStatus] = useState("idle");
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleChange = (e) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }));
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setStatus("loading");
+
+    try {
+      // TODO: replace with real contact endpoint once backend route is ready
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      setStatus("success");
+      setFormData(initialFormState);
+    } catch {
+      setStatus("error");
+    }
   };
 
   return (
-    <div>
-    <div className="py-20 px-6 md:px-12">
+    <div className="min-h-screen bg-white">
       <Navbar />
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <br />
-          <h1 className="text-4xl md:text-5xl font-bold mb-6">Contact Us</h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Have questions? We&#39;d love to hear from you. Send us a message and we&#39;ll
-            respond as soon as possible.
-          </p>
-        </div>
 
-        <div className="grid md:grid-cols-2 gap-12">
-          <div className="space-y-8">
-            <div className="flex items-start space-x-4">
-              <Mail className="w-6 h-6 text-emerald-600 mt-1" />
-              <div>
-                <h3 className="font-semibold mb-1">Email</h3>
-                <p className="text-gray-600">help.cognito@gmail.com</p>
-              </div>
-            </div>
+      <section className="relative overflow-hidden bg-slate-950 pt-[76px] text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(45,212,191,0.16),_transparent_30%)]" />
 
-            <div className="flex items-start space-x-4">
-              <Phone className="w-6 h-6 text-emerald-600 mt-1" />
-              <div>
-                <h3 className="font-semibold mb-1">Phone</h3>
-                <p className="text-gray-600">+91 99325-66274</p>
-              </div>
-            </div>
-
-            <div className="flex items-start space-x-4">
-              <MapPin className="w-6 h-6 text-emerald-600 mt-1" />
-              <div>
-                <h3 className="font-semibold mb-1">Address</h3>
-                <p className="text-gray-600">
-                  Saltlake Sec-IV, Chingrighata<br />
-                  Kolkata, West Bengal, 700101<br />
-                  India
-                </p>
-              </div>
-            </div>
+        <div className="relative mx-auto max-w-4xl px-6 py-20 text-center lg:px-8">
+          <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
+            Get in touch
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                Name
-              </label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
+          <h1 className="mt-6 text-4xl font-bold tracking-tight sm:text-5xl">
+            We are happy to help.
+          </h1>
+
+          <p className="mx-auto mt-5 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
+            Have a question about Cognito? Send a message and our team will get
+            back to you as soon as possible.
+          </p>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-6 py-20 lg:px-8">
+        <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
+          <div className="space-y-6">
+            {contactDetails.map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <div
+                  key={item.label}
+                  className="flex items-start gap-4 rounded-[24px] border border-slate-200 bg-slate-50 p-5"
+                >
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
+                    <Icon className="h-5 w-5" />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      {item.label}
+                    </h3>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                      {item.value}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+          >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div>
+                <label htmlFor="name" className="mb-2 block text-sm font-medium text-slate-700">
+                  Name
+                </label>
+                <input
+                  id="name"
+                  name="name"
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={handleChange}
+                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="email" className="mb-2 block text-sm font-medium text-slate-700">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
+                />
+              </div>
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="subject" className="mb-2 block text-sm font-medium text-slate-700">
                 Subject
               </label>
               <input
-                type="text"
                 id="subject"
                 name="subject"
+                type="text"
+                required
                 value={formData.subject}
                 onChange={handleChange}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
               />
             </div>
 
             <div>
-              <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="message" className="mb-2 block text-sm font-medium text-slate-700">
                 Message
               </label>
               <textarea
                 id="message"
                 name="message"
+                required
+                rows={5}
                 value={formData.message}
                 onChange={handleChange}
-                required
-                rows={4}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
               />
             </div>
 
             <button
               type="submit"
-              disabled={status === 'loading'}
-              className="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white py-2 px-4 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              disabled={status === "loading"}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full cursor-pointer bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {status === 'loading' ? (
-                'Sending...'
+              {status === "loading" ? (
+                "Sending..."
               ) : (
                 <>
-                  <Send className="w-4 h-4" />
-                  Send Message
+                  <Send className="h-4 w-4" />
+                  Send message
                 </>
               )}
             </button>
 
-            {status === 'success' && (
-              <p className="text-green-600 text-center">
-                Message sent successfully!
+            {status === "success" && (
+              <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-700">
+                Message sent successfully.
               </p>
             )}
 
-            {status === 'error' && (
-              <p className="text-red-600 text-center">
+            {status === "error" && (
+              <p className="rounded-2xl bg-rose-50 px-4 py-3 text-center text-sm font-medium text-rose-700">
                 Failed to send message. Please try again.
               </p>
             )}
           </form>
         </div>
-      </div>
-      
-    </div>
-    <Footer />
+      </section>
+
+      <Footer />
     </div>
   );
-}
+};
 
-export default Contact;
+export default ContactUs;
