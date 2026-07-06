@@ -298,7 +298,7 @@ const NotificationFeed = () => {
               setFilters(FILTER_DEFAULTS);
               fetchNotifications();
             }}
-            className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+            className="inline-flex items-center gap-2 rounded-full cursor-pointer border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
           >
             <RefreshCcw size={15} />
             Reset
@@ -321,7 +321,7 @@ const NotificationFeed = () => {
             onChange={(event) =>
               setFilters((prev) => ({ ...prev, category: event.target.value }))
             }
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
+            className="rounded-2xl border cursor-pointer border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
           >
             {categories.map((category) => (
               <option key={category} value={category}>
@@ -337,7 +337,7 @@ const NotificationFeed = () => {
               onChange={(event) =>
                 setFilters((prev) => ({ ...prev, pinnedOnly: event.target.checked }))
               }
-              className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+              className="h-4 w-4 rounded cursor-pointer border-slate-300 text-cyan-600 focus:ring-cyan-500"
             />
             Only pinned
           </label>
@@ -349,7 +349,7 @@ const NotificationFeed = () => {
               onChange={(event) =>
                 setFilters((prev) => ({ ...prev, hasEvent: event.target.checked }))
               }
-              className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+              className="h-4 w-4 rounded cursor-pointer border-slate-300 text-cyan-600 focus:ring-cyan-500"
             />
             Event posts only
           </label>

@@ -176,7 +176,7 @@ const EditNotificationModal = ({ notification, isOpen, onClose, onSaved }) => {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 py-6">
       <div
-        className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+        className="absolute inset-0 cursor-pointer bg-slate-950/60 backdrop-blur-sm"
         onClick={() => !isSaving && onClose()}
       />
 
@@ -184,14 +184,14 @@ const EditNotificationModal = ({ notification, isOpen, onClose, onSaved }) => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-notification-title"
-        className="relative w-full max-w-lg animate-[modal-in_180ms_ease-out] rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl"
+        className="relative w-full max-w-lg  animate-[modal-in_180ms_ease-out] rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl"
       >
         <button
           type="button"
           onClick={() => !isSaving && onClose()}
           disabled={isSaving}
           aria-label="Close dialog"
-          className="absolute right-4 top-4 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          className="absolute right-4 top-4 rounded-full cursor-pointer p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
         >
           <X size={16} />
         </button>
@@ -229,7 +229,7 @@ const EditNotificationModal = ({ notification, isOpen, onClose, onSaved }) => {
               <select
                 value={category}
                 onChange={(event) => setCategory(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
+                className="w-full rounded-2xl border cursor-pointer border-slate-200 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
               >
                 {CATEGORY_OPTIONS.map((option) => (
                   <option key={option} value={option}>
@@ -245,7 +245,7 @@ const EditNotificationModal = ({ notification, isOpen, onClose, onSaved }) => {
                 type="datetime-local"
                 value={eventDate}
                 onChange={(event) => setEventDate(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
+                className="w-full rounded-2xl border cursor-pointer border-slate-200 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
               />
             </div>
           </div>
@@ -267,7 +267,7 @@ const EditNotificationModal = ({ notification, isOpen, onClose, onSaved }) => {
             type="button"
             onClick={() => !isSaving && onClose()}
             disabled={isSaving}
-            className="inline-flex items-center justify-center rounded-full border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-full cursor-pointer border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
           >
             Cancel
           </button>
@@ -275,7 +275,7 @@ const EditNotificationModal = ({ notification, isOpen, onClose, onSaved }) => {
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-700 disabled:opacity-70"
+            className="inline-flex items-center justify-center gap-2 rounded-full cursor-pointer bg-cyan-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-700 disabled:opacity-70"
           >
             {isSaving && (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -594,7 +594,7 @@ const NotificationCard = ({
                   <button
                     type="button"
                     onClick={() => setShowActions((prev) => !prev)}
-                    className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    className="rounded-full p-2 cursor-pointer text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
                   >
                     <MoreHorizontal size={18} />
                   </button>
@@ -607,7 +607,7 @@ const NotificationCard = ({
                           setShowActions(false);
                           setIsEditModalOpen(true);
                         }}
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                        className="flex w-full items-center cursor-pointer gap-3 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                       >
                         <Pencil size={16} />
                         Edit notification
@@ -616,7 +616,7 @@ const NotificationCard = ({
                       <button
                         type="button"
                         onClick={handlePinToggle}
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                        className="flex w-full items-center cursor-pointer gap-3 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                       >
                         <Pin size={16} />
                         {notification.isPinned ? "Unpin post" : "Pin post"}
@@ -629,7 +629,7 @@ const NotificationCard = ({
                             ? requestArchiveConfirmation
                             : requestPublishConfirmation
                         }
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
+                        className="flex w-full items-center cursor-pointer gap-3 px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                       >
                         {notification.status === "published" ? (
                           <>
@@ -647,7 +647,7 @@ const NotificationCard = ({
                       <button
                         type="button"
                         onClick={requestDeleteConfirmation}
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-rose-600 transition hover:bg-rose-50"
+                        className="flex w-full items-center cursor-pointer gap-3 px-4 py-3 text-left text-sm text-rose-600 transition hover:bg-rose-50"
                       >
                         <Trash2 size={16} />
                         Delete post
@@ -666,7 +666,7 @@ const NotificationCard = ({
                 <p
                   ref={descriptionRef}
                   className={`mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-700 ${
-                    !isDescriptionExpanded ? "line-clamp-2 pr-8" : ""
+                    !isDescriptionExpanded ? "line-clamp-2 pr-10" : ""
                   }`}
                 >
                   {notification.description}
@@ -677,7 +677,7 @@ const NotificationCard = ({
                     onClick={() => setIsDescriptionExpanded((prev) => !prev)}
                     className={`text-sm font-serif cursor-pointer text-cyan-700 transition hover:text-cyan-800 ${
                       !isDescriptionExpanded
-                        ? "absolute right-0 bottom-0.5 pr-2"
+                        ? "absolute right-0 bottom-[-0.8rem] pl-5 text-sm"
                         : "mt-1 relative"
                     }`}
                   >
